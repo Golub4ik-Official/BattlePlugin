@@ -12,7 +12,7 @@ import battle.model.PlayerStats;
 import battle.model.StatEvent;
 import battle.webhook.DiscordWebhook;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
@@ -42,7 +42,7 @@ import java.util.UUID;
  */
 public class BattleManager {
 
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
+    private static final PlainTextComponentSerializer PLAIN = PlainTextComponentSerializer.plainText();
 
     private final BattlePlugin plugin;
     private final TeamManager teamManager;
@@ -796,7 +796,7 @@ public class BattleManager {
         if (name == null) {
             return item.getType().name().toLowerCase();
         }
-        String s = LEGACY.serialize(name);
+        String s = PLAIN.serialize(name);
         return s.isEmpty() ? item.getType().name().toLowerCase() : s;
     }
 
