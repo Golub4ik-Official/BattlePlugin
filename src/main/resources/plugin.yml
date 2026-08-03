@@ -1,0 +1,22 @@
+name: BattlePlugin
+version: 1.0.0
+main: battle.BattlePlugin
+api-version: '1.21.11'
+description: Плагин для ведения битв между командами с захватом точек.
+author: Golub4ik
+
+permissions:
+  battle.admin:
+    description: Полный доступ к управлению битвами
+    default: op
+    children:
+      battle.team.set: true
+  battle.team.set:
+    description: Доступ к команде /battle team set
+    default: false
+  battle.status:
+    description: Просмотр статуса и статистики битв
+    default: true
+  battle.stats.others:
+    description: Просмотр статистики другого игрока (включая его команду)
+    default: false
