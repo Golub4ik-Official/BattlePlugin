@@ -21,6 +21,7 @@ public enum BattleTeam {
     private final BarColor barColor;
     private final Color particleColor;
     private final ChatColor chatColor;
+    private String label;
 
     BattleTeam(String displayName, NamedTextColor textColor, BarColor barColor, Color particleColor) {
         this.displayName = displayName;
@@ -37,7 +38,22 @@ public enum BattleTeam {
     }
 
     public String displayName() {
-        return displayName;
+        return label != null && !label.isBlank() ? label : displayName;
+    }
+
+    /** Устанавливает кастомный ярлык (показывается вместо стандартного названия). */
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    /** Сбрасывает ярлык к стандартному названию команды. */
+    public void resetLabel() {
+        this.label = null;
+    }
+
+    /** Есть ли установленный ярлык. */
+    public boolean hasLabel() {
+        return label != null && !label.isBlank();
     }
 
     public NamedTextColor textColor() {

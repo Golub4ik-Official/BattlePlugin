@@ -99,7 +99,18 @@ public class BattleCommand {
                                 .requires(s -> s.getSender().hasPermission("battle.admin"))
                                 .then(Commands.argument("team", StringArgumentType.word())
                                         .suggests(this::suggestTeams)
-                                        .executes(this::teamGiveInv))))
+                                        .executes(this::teamGiveInv)))
+                        .then(Commands.literal("label")
+                                .requires(s -> s.getSender().hasPermission("battle.admin"))
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .suggests(this::suggestTeams)
+                                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                                .executes(this::teamLabel))))
+                        .then(Commands.literal("unlabel")
+                                .requires(s -> s.getSender().hasPermission("battle.admin"))
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .suggests(this::suggestTeams)
+                                        .executes(this::teamUnlabel))))
                 .then(Commands.literal("start")
                         .requires(s -> s.getSender().hasPermission("battle.admin"))
                         .then(Commands.argument("minutes", IntegerArgumentType.integer(1, 1440))
@@ -369,6 +380,40 @@ public class BattleCommand {
             copy[i] = source[i] == null ? null : source[i].clone();
         }
         return copy;
+    }
+
+    private int teamLabel(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        CommandSender sender = ctx.getSource().getSender();
+        BattleTeam team = resolveTeam(ctx);
+        if (team == null) {
+            return 1;
+        }
+        String name = ctx.getArgument("name", String.class).trim();
+        if (name.isEmpty()) {
+            sender.sendMessage(Messages.msg("<red>Ярлык не может быть пустым."));
+            return 1;
+        }
+        team.setLabel(name);
+        sender.sendMessage(Messages.msg("<green>Команда</green> " + team.colorize(team.displayName())
+                + " <green>теперь называется</green> <yellow>\"" + name + "\"</yellow> <gray>(цвет сохранён).</gray>"));
+        return 1;
+    }
+
+    private int teamUnlabel(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        CommandSender sender = ctx.getSource().getSender();
+        BattleTeam team = resolveTeam(ctx);
+        if (team == null) {
+            return 1;
+        }
+        if (!team.hasLabel()) {
+            sender.sendMessage(Messages.msg("<gray>У команды " + team.colorize(team.displayName())
+                    + " <gray>нет ярлыка."));
+            return 1;
+        }
+        team.resetLabel();
+        sender.sendMessage(Messages.msg("<green>Ярлык команды</green> " + team.colorize(team.displayName())
+                + " <green>сброшен.</green>"));
+        return 1;
     }
 
     @SuppressWarnings("unchecked")

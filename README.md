@@ -56,6 +56,8 @@
 | `/battle team freeze <команда>` | Заморозить команду (запрет движения) | `battle.admin` |
 | `/battle team unfreeze <команда>` | Разморозить команду | `battle.admin` |
 | `/battle team giveinv <команда>` | Скопировать инвентарь админа (включая броню) всей команде | `battle.admin` |
+| `/battle team label <команда> <название>` | Установить команде кастомный ярлык (цвет сохраняется) | `battle.admin` |
+| `/battle team unlabel <команда>` | Сбросить ярлык команды на стандартное название | `battle.admin` |
 | `/battle start <минуты> <команда1> <команда2> [команда3] [команда4] <название>` | Начать битву | `battle.admin` |
 | `/battle stop` | Остановить битву | `battle.admin` |
 | `/battle status` | Статус текущей битвы | `battle.status` |
