@@ -13,10 +13,12 @@ import battle.model.StatEvent;
 import battle.webhook.DiscordWebhook;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Particle;
+import org.bukkit.Sound;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
@@ -24,6 +26,7 @@ import org.bukkit.entity.TextDisplay;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -61,11 +64,17 @@ public class BattleManager {
     private int killScore;
     private int deathScore;
     private int teamkillScore;
+    private boolean announcementsEnabled;
+    private int killstreakWindowSeconds;
+    private boolean announcementSounds;
 
     private DiscordWebhook webhook;
 
     private final Map<CapturePoint, Integer> holdTicks = new HashMap<>();
     private final Map<CapturePoint, TextDisplay> pointDisplays = new HashMap<>();
+    private boolean firstBloodAnnounced;
+    private final Map<UUID, Integer> lastKillTime = new HashMap<>();
+    private final Map<UUID, Integer> killStreak = new HashMap<>();
 
     public BattleManager(BattlePlugin plugin, TeamManager teamManager, PointManager pointManager,
                          ScoreboardManager scoreboardManager, BossBarManager bossBarManager,
@@ -91,6 +100,9 @@ public class BattleManager {
         killScore = c.getInt("battle.scoring.kill", 5);
         deathScore = c.getInt("battle.scoring.death", -2);
         teamkillScore = c.getInt("battle.scoring.teamkill", -5);
+        announcementsEnabled = c.getBoolean("battle.announcements.enabled", true);
+        killstreakWindowSeconds = c.getInt("battle.announcements.killstreak-window-seconds", 8);
+        announcementSounds = c.getBoolean("battle.announcements.sounds", true);
         teamManager.setMinPlaytimeHours(c.getInt("team.min-playtime-hours", 0));
         webhook = new DiscordWebhook(c.getString("discord.webhook-url", ""));
     }
@@ -133,6 +145,9 @@ public class BattleManager {
         battle = new Battle(name, seconds, teams);
         pointManager.resetAll();
         holdTicks.clear();
+        firstBloodAnnounced = false;
+        lastKillTime.clear();
+        killStreak.clear();
 
         broadcast(Messages.raw("<gold>═══ Битва началась! ═══"));
         broadcast(Messages.raw("<gold>Название: <white>" + name));
@@ -183,6 +198,7 @@ public class BattleManager {
             battle.statsOf(victim.getUniqueId(), victim.getName()).addDeath();
             battle.statsOf(killer.getUniqueId(), killer.getName()).addTeamkill();
             battle.events().add(StatEvent.teamkill(killer.getName(), victim.getName(), weapon, killerTeam, time, teamkillScore));
+            resetKillStreak(victim.getUniqueId());
             broadcast(Messages.raw(killerTeam.colorize(killer.getName()) + " <red>убил(а) союзника</red> "
                     + victimTeam.colorize(victim.getName()) + " <gray>(" + weapon + ")</gray> <yellow>(" + teamkillScore + ")</yellow>"));
         } else if (killerInBattle) {
@@ -192,6 +208,8 @@ public class BattleManager {
             battle.statsOf(killer.getUniqueId(), killer.getName()).addKill();
             battle.statsOf(victim.getUniqueId(), victim.getName()).addDeath();
             battle.events().add(StatEvent.kill(killer.getName(), victim.getName(), weapon, killerTeam, time, killScore));
+            resetKillStreak(victim.getUniqueId());
+            announceKill(killer, victim, weapon, time);
             broadcast(Messages.raw(killerTeam.colorize(killer.getName()) + " <gray>убил(а)</gray> "
                     + victimTeam.colorize(victim.getName()) + " <gray>(" + weapon + ")</gray> <green>(+" + killScore + ")</green>"));
         } else {
@@ -199,9 +217,98 @@ public class BattleManager {
             battle.scoreOf(victimTeam).deaths++;
             battle.statsOf(victim.getUniqueId(), victim.getName()).addDeath();
             battle.events().add(StatEvent.death(victim.getName(), victimTeam, time, deathScore));
+            resetKillStreak(victim.getUniqueId());
             broadcast(Messages.raw(victimTeam.colorize(victim.getName()) + " <gray>погиб(ла)</gray> <yellow>(" + deathScore + ")</yellow>"));
         }
         refreshDisplays();
+    }
+
+    /** Сбрасывает серию убийств игрока (при его смерти). */
+    private void resetKillStreak(UUID uuid) {
+        lastKillTime.remove(uuid);
+        killStreak.put(uuid, 0);
+    }
+
+    /** Анонс серии убийств в стиле Dota 2: FIRST BLOOD, DOUBLE KILL, TRIPLE KILL, ULTRA KILL, RAMPAGE. */
+    private void announceKill(Player killer, Player victim, String weapon, int time) {
+        if (battle == null || !announcementsEnabled) {
+            return;
+        }
+        UUID uid = killer.getUniqueId();
+        int prevTime = lastKillTime.getOrDefault(uid, -1);
+        int streak;
+        if (prevTime >= 0 && (time - prevTime) <= killstreakWindowSeconds) {
+            streak = killStreak.getOrDefault(uid, 0) + 1;
+        } else {
+            streak = 1;
+        }
+        killStreak.put(uid, streak);
+        lastKillTime.put(uid, time);
+
+        String subtitle = killer.getName() + " <gray>убил(а)</gray> <white>" + victim.getName() + "</white>"
+                + (weapon == null ? "" : " <gray>(" + weapon + ")</gray>");
+
+        if (!firstBloodAnnounced) {
+            firstBloodAnnounced = true;
+            showAnnouncement(Announcement.FIRST_BLOOD, subtitle);
+            return;
+        }
+        Announcement ann = switch (streak) {
+            case 2 -> Announcement.DOUBLE_KILL;
+            case 3 -> Announcement.TRIPLE_KILL;
+            case 4 -> Announcement.ULTRA_KILL;
+            default -> streak >= 5 ? Announcement.RAMPAGE : null;
+        };
+        if (ann != null) {
+            showAnnouncement(ann, subtitle);
+        }
+    }
+
+    /** Показывает Title всем участникам битвы и (опционально) проигрывает звук. */
+    private void showAnnouncement(Announcement ann, String subtitle) {
+        Title.Times times = Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(1800), Duration.ofMillis(400));
+        Component titleComp = Messages.raw(ann.meta);
+        Component subComp = Messages.raw(subtitle);
+        Title title = Title.title(titleComp, subComp, times);
+        for (Player p : participants()) {
+            p.showTitle(title);
+            if (announcementSounds && ann.sound != null) {
+                p.playSound(p.getLocation(), ann.sound, ann.volume, ann.pitch);
+            }
+        }
+    }
+
+    /** Онлайн-участники текущей битвы. */
+    private List<Player> participants() {
+        List<Player> list = new ArrayList<>();
+        if (battle == null) {
+            return list;
+        }
+        for (BattleTeam t : battle.teams()) {
+            list.addAll(teamManager.onlineMembers(t));
+        }
+        return list;
+    }
+
+    /** Типы анонсов серий убийств. */
+    private enum Announcement {
+        FIRST_BLOOD("<gold><bold>FIRST BLOOD</bold></gold>", Sound.ENTITY_ENDER_DRAGON_GROWL, 1.0f, 1.0f),
+        DOUBLE_KILL("<yellow><bold>DOUBLE KILL</bold></yellow>", Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f),
+        TRIPLE_KILL("<gold><bold>TRIPLE KILL</bold></gold>", Sound.BLOCK_BELL_USE, 1.0f, 1.0f),
+        ULTRA_KILL("<red><bold>ULTRA KILL</bold></red>", Sound.ENTITY_WITHER_SPAWN, 1.0f, 1.0f),
+        RAMPAGE("<gradient:#ff5555:#ffaa00><bold>RAMPAGE!</bold></gradient>", Sound.ENTITY_WITHER_DEATH, 1.4f, 0.9f);
+
+        final String meta;
+        final Sound sound;
+        final float volume;
+        final float pitch;
+
+        Announcement(String meta, Sound sound, float volume, float pitch) {
+            this.meta = meta;
+            this.sound = sound;
+            this.volume = volume;
+            this.pitch = pitch;
+        }
     }
 
     /** Учёт урона, нанесённого противнику (только по врагам). */
