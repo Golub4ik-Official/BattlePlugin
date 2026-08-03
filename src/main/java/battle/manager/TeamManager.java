@@ -1,6 +1,7 @@
 package battle.manager;
 
 import battle.BattleTeam;
+import battle.api.event.TeamChangeEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
@@ -26,12 +27,14 @@ public class TeamManager {
 
     public void set(Player player, BattleTeam team) {
         assignments.put(player.getUniqueId(), team);
+        Bukkit.getPluginManager().callEvent(new TeamChangeEvent(player.getUniqueId(), team));
         refreshColoredNames();
     }
 
     public void remove(Player player) {
         assignments.remove(player.getUniqueId());
         clearFrozen(player);
+        Bukkit.getPluginManager().callEvent(new TeamChangeEvent(player.getUniqueId(), null));
         refreshColoredNames();
     }
 

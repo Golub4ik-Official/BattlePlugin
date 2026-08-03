@@ -1,5 +1,7 @@
 package battle;
 
+import battle.api.BattleApi;
+import battle.api.BattleApiImpl;
 import battle.command.BattleCommand;
 import battle.listener.BattleListener;
 import battle.manager.BossBarManager;
@@ -35,6 +37,9 @@ public class BattlePlugin extends JavaPlugin {
         statsManager.load();
         battleManager = new BattleManager(this, teamManager, pointManager,
                 scoreboardManager, bossBarManager, statsManager);
+
+        getServer().getServicesManager().register(BattleApi.class,
+                new BattleApiImpl(this), this, org.bukkit.plugin.ServicePriority.Normal);
 
         getServer().getPluginManager().registerEvents(
                 new BattleListener(battleManager, scoreboardManager, bossBarManager, teamManager), this);

@@ -3,6 +3,8 @@ package battle.manager;
 import battle.BattleTeam;
 import battle.BattlePlugin;
 import battle.Messages;
+import battle.api.event.BattleEndedEvent;
+import battle.api.event.BattleStartedEvent;
 import battle.model.Battle;
 import battle.model.BattleStats;
 import battle.model.CapturePoint;
@@ -130,6 +132,8 @@ public class BattleManager {
         broadcast(Messages.raw("<gold>Название: <white>" + name));
         broadcast(Messages.raw("<gold>Длительность: <white>" + minutes + " <gold>мин."));
         broadcast(Messages.raw("<gold>Команды: <white>" + formatTeams(teams)));
+
+        plugin.getServer().getPluginManager().callEvent(new BattleStartedEvent(name, seconds, teams));
 
         refreshDisplays();
         updatePointDisplays();
@@ -434,6 +438,7 @@ public class BattleManager {
         }
 
         BattleTeam winner = determineWinner(ended);
+        plugin.getServer().getPluginManager().callEvent(new BattleEndedEvent(ended.name(), winner, ended.teams()));
 
         Map<BattleTeam, BattleStats.TeamSummary> teams = new EnumMap<>(BattleTeam.class);
         for (BattleTeam t : ended.teams()) {
