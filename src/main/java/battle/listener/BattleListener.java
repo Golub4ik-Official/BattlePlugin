@@ -1,9 +1,13 @@
 package battle.listener;
 
+import battle.BattleTeam;
+import battle.api.event.TeamChangeEvent;
 import battle.manager.BattleManager;
 import battle.manager.BossBarManager;
 import battle.manager.ScoreboardManager;
 import battle.manager.TeamManager;
+import battle.manager.VoiceGroupsHook;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -25,13 +29,16 @@ public class BattleListener implements Listener {
     private final ScoreboardManager scoreboardManager;
     private final BossBarManager bossBarManager;
     private final TeamManager teamManager;
+    private final VoiceGroupsHook voiceGroupsHook;
 
     public BattleListener(BattleManager battleManager, ScoreboardManager scoreboardManager,
-                          BossBarManager bossBarManager, TeamManager teamManager) {
+                          BossBarManager bossBarManager, TeamManager teamManager,
+                          VoiceGroupsHook voiceGroupsHook) {
         this.battleManager = battleManager;
         this.scoreboardManager = scoreboardManager;
         this.bossBarManager = bossBarManager;
         this.teamManager = teamManager;
+        this.voiceGroupsHook = voiceGroupsHook;
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -66,8 +73,15 @@ public class BattleListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
         battleManager.refreshDisplays();
-        teamManager.refresh(event.getPlayer());
+        teamManager.refresh(player);
+        if (battleManager.getActiveBattle() != null) {
+            BattleTeam team = teamManager.get(player);
+            if (team != null && battleManager.getActiveBattle().teams().contains(team)) {
+                voiceGroupsHook.joinTeam(player, team);
+            }
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -89,5 +103,21 @@ public class BattleListener implements Listener {
         scoreboardManager.remove(player);
         bossBarManager.remove(player);
         teamManager.clearFrozen(player);
+    }
+
+    /** При смене команды во время битвы игрок переводится в голосовой канал новой команды. */
+    @EventHandler
+    public void onTeamChange(TeamChangeEvent event) {
+        if (battleManager.getActiveBattle() == null) {
+            return;
+        }
+        BattleTeam team = event.getTeam();
+        if (team == null) {
+            return;
+        }
+        Player player = Bukkit.getPlayer(event.getPlayerId());
+        if (player != null && battleManager.getActiveBattle().teams().contains(team)) {
+            voiceGroupsHook.joinTeam(player, team);
+        }
     }
 }

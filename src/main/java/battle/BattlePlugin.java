@@ -11,6 +11,7 @@ import battle.manager.ScoreboardManager;
 import battle.manager.StatsManager;
 import battle.manager.TabHook;
 import battle.manager.TeamManager;
+import battle.manager.VoiceGroupsHook;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -25,6 +26,7 @@ public class BattlePlugin extends JavaPlugin {
     private BossBarManager bossBarManager;
     private StatsManager statsManager;
     private BattleManager battleManager;
+    private VoiceGroupsHook voiceGroupsHook;
 
     @Override
     public void onEnable() {
@@ -32,19 +34,20 @@ public class BattlePlugin extends JavaPlugin {
 
         teamManager = new TeamManager();
         TabHook.init(this, teamManager);
+        voiceGroupsHook = new VoiceGroupsHook(this, teamManager);
         pointManager = new PointManager();
         scoreboardManager = new ScoreboardManager();
         bossBarManager = new BossBarManager(this, pointManager);
         statsManager = new StatsManager(this);
         statsManager.load();
         battleManager = new BattleManager(this, teamManager, pointManager,
-                scoreboardManager, bossBarManager, statsManager);
+                scoreboardManager, bossBarManager, statsManager, voiceGroupsHook);
 
         getServer().getServicesManager().register(BattleApi.class,
                 new BattleApiImpl(this), this, org.bukkit.plugin.ServicePriority.Normal);
 
         getServer().getPluginManager().registerEvents(
-                new BattleListener(battleManager, scoreboardManager, bossBarManager, teamManager), this);
+                new BattleListener(battleManager, scoreboardManager, bossBarManager, teamManager, voiceGroupsHook), this);
 
         getServer().getScheduler().runTaskTimer(this,
                 () -> teamManager.refreshColoredNames(), 20L, 20L);

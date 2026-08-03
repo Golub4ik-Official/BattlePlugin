@@ -50,6 +50,7 @@ public class BattleManager {
     private final ScoreboardManager scoreboardManager;
     private final BossBarManager bossBarManager;
     private final StatsManager statsManager;
+    private final VoiceGroupsHook voiceGroupsHook;
 
     private Battle battle;
     private BukkitTask tickTask;
@@ -83,13 +84,14 @@ public class BattleManager {
 
     public BattleManager(BattlePlugin plugin, TeamManager teamManager, PointManager pointManager,
                          ScoreboardManager scoreboardManager, BossBarManager bossBarManager,
-                         StatsManager statsManager) {
+                         StatsManager statsManager, VoiceGroupsHook voiceGroupsHook) {
         this.plugin = plugin;
         this.teamManager = teamManager;
         this.pointManager = pointManager;
         this.scoreboardManager = scoreboardManager;
         this.bossBarManager = bossBarManager;
         this.statsManager = statsManager;
+        this.voiceGroupsHook = voiceGroupsHook;
         readConfig();
     }
 
@@ -118,6 +120,7 @@ public class BattleManager {
     public void reload() {
         plugin.reloadConfig();
         readConfig();
+        voiceGroupsHook.reload();
     }
 
     public Battle getActiveBattle() {
@@ -198,6 +201,7 @@ public class BattleManager {
         firstBloodAnnounced = false;
         lastKillTime.clear();
         killStreak.clear();
+        voiceGroupsHook.startBattle(name, teams);
 
         broadcast(Messages.raw("<gold>═══ Битва началась! ═══"));
         broadcast(Messages.raw("<gold>Название: <white>" + name));
@@ -734,6 +738,7 @@ public class BattleManager {
         scoreboardManager.removeAll(Set.of());
         bossBarManager.clearAll();
         removePointDisplays();
+        voiceGroupsHook.endBattle();
         battle = null;
     }
 
