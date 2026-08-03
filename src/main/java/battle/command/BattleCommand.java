@@ -30,12 +30,14 @@ import org.bukkit.inventory.ItemStack;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Brigadier-дерево команды /battle.
@@ -211,6 +213,14 @@ public class BattleCommand {
         if (team == null) {
             sender.sendMessage(Messages.msg("<red>Неизвестная команда: <white>" + teamName
                     + "</white>. Доступные: red, blue, green, yellow."));
+            return 1;
+        }
+        if (!teamManager.meetsPlaytime(target)) {
+            sender.sendMessage(Messages.msg("<red>Игрок <white>" + target.getName()
+                    + "</white> провёл на сервере только <white>"
+                    + String.format("%.1f", teamManager.playtimeHours(target))
+                    + "</white> ч. из <white>" + teamManager.minPlaytimeHours()
+                    + "</white> ч. — назначение в команду запрещено."));
             return 1;
         }
         teamManager.set(target, team);
@@ -627,7 +637,7 @@ public class BattleCommand {
                     + " <red>не участвовала в битве #<white>" + stats.id + "</white>."));
             return;
         }
-        sender.sendMessage(Messages.raw("<gold>═══ Команда " + team.colorize(team.displayName())
+        sender.sendMessage(Messages.raw("<gold>═══ Команда " + team.colorize(teamDisplay(stats, team))
                 + "</gold> <gray>(битва #<white>" + stats.id + "</white>: " + stats.name + ")</gray>"));
         sender.sendMessage(Messages.raw("<gray>- Очки: <white>"
                 + s.score + "    <gray>Убийств: <white>" + s.kills
@@ -652,7 +662,7 @@ public class BattleCommand {
         sender.sendMessage(Messages.raw("<gold>═══ " + colored + " <gold>— битва #<white>" + stats.id
                 + "</white>: <white>" + stats.name + "</white> ═══"));
         if (team != null) {
-            sender.sendMessage(Messages.raw("<gray>Команда: " + team.colorize(team.displayName())));
+            sender.sendMessage(Messages.raw("<gray>Команда: " + team.colorize(teamDisplay(stats, team))));
         }
         sender.sendMessage(Messages.raw("<red>Убийств: <white>" + ps.kills
                 + "    <red>Смертей: <white>" + ps.deaths
@@ -660,6 +670,88 @@ public class BattleCommand {
         sender.sendMessage(Messages.raw("<green>K/D: <white>" + ps.kd()
                 + "    <yellow>Лучшая серия: <white>" + ps.bestStreak
                 + "    <yellow>Точек захвачено: <white>" + ps.pointsCaptured));
+
+        Map<String, Integer> victims = sortedByCount(killsPerVictim(stats, ps.name));
+        Map<String, Integer> tkVictims = sortedByCount(teamkillsPerVictim(stats, ps.name));
+        Map<String, Integer> killers = sortedByCount(deathsPerKiller(stats, ps.name));
+        int environmentDeaths = deathsWithoutKiller(stats, ps.name);
+        if (!victims.isEmpty()) {
+            sender.sendMessage(Messages.raw("<green>Убил(а):</green> " + formatOpponents(victims)));
+        }
+        if (!tkVictims.isEmpty()) {
+            sender.sendMessage(Messages.raw("<red>Тимкиллы (убил(а) союзников):</red> " + formatOpponents(tkVictims)));
+        }
+        if (!killers.isEmpty()) {
+            sender.sendMessage(Messages.raw("<red>Убит(а) кем:</red> " + formatOpponents(killers)));
+        }
+        if (environmentDeaths > 0) {
+            sender.sendMessage(Messages.raw("<gray>Прочих смертей (не от игрока битвы): <white>" + environmentDeaths));
+        }
+    }
+
+    /** Название команды с учётом ярлыка, сохранённого в записи битвы. */
+    private String teamDisplay(BattleStats stats, BattleTeam team) {
+        BattleStats.TeamSummary s = stats.teams.get(team);
+        String label = s == null ? null : s.label;
+        return (label != null && !label.isBlank()) ? label : team.displayName();
+    }
+
+    /** Кого игрок убил (по имени жертвы) и сколько раз. */
+    private Map<String, Integer> killsPerVictim(BattleStats stats, String name) {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        for (StatEvent ev : stats.events) {
+            if (ev.type == StatEvent.Type.KILL && ev.killer != null && name.equalsIgnoreCase(ev.killer)) {
+                map.merge(ev.victim, 1, Integer::sum);
+            }
+        }
+        return map;
+    }
+
+    /** Каких союзников игрок убил (тимкиллы). */
+    private Map<String, Integer> teamkillsPerVictim(BattleStats stats, String name) {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        for (StatEvent ev : stats.events) {
+            if (ev.type == StatEvent.Type.TEAMKILL && ev.killer != null && name.equalsIgnoreCase(ev.killer)) {
+                map.merge(ev.victim, 1, Integer::sum);
+            }
+        }
+        return map;
+    }
+
+    /** Кто убивал игрока (по имени киллера) и сколько раз. */
+    private Map<String, Integer> deathsPerKiller(BattleStats stats, String name) {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        for (StatEvent ev : stats.events) {
+            if (ev.type == StatEvent.Type.KILL && ev.victim != null && name.equalsIgnoreCase(ev.victim)) {
+                map.merge(ev.killer, 1, Integer::sum);
+            }
+        }
+        return map;
+    }
+
+    /** Смерти игрока, где киллер — не участник битвы (события DEATH). */
+    private int deathsWithoutKiller(BattleStats stats, String name) {
+        int count = 0;
+        for (StatEvent ev : stats.events) {
+            if (ev.type == StatEvent.Type.DEATH && ev.victim != null && name.equalsIgnoreCase(ev.victim)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Сортирует карту «имя → счёт» по убыванию счёта. */
+    private Map<String, Integer> sortedByCount(Map<String, Integer> map) {
+        return map.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a, LinkedHashMap::new));
+    }
+
+    private String formatOpponents(Map<String, Integer> map) {
+        return map.entrySet().stream()
+                .map(e -> "<white>" + e.getKey() + "</white>"
+                        + (e.getValue() > 1 ? " <gray>(x" + e.getValue() + ")</gray>" : ""))
+                .collect(Collectors.joining("<gray>, </gray>"));
     }
 
     private int history(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
@@ -671,7 +763,7 @@ public class BattleCommand {
         }
         sender.sendMessage(Messages.raw("<gold>История битв:"));
         for (BattleStats s : history) {
-            String winner = s.winner == null ? "<gray>ничья" : s.winner.colorize(s.winner.displayName());
+            String winner = s.winner == null ? "<gray>ничья" : s.winner.colorize(teamDisplay(s, s.winner));
             sender.sendMessage(Messages.raw("<gold>#" + s.id + "</gold> <white>" + s.name + "</white> — " + winner));
         }
         return 1;
@@ -690,13 +782,13 @@ public class BattleCommand {
         sender.sendMessage(Messages.raw("<gray>Начата: <white>" + fmt.format(new Date(stats.started))
                 + "</white>   Длительность: <white>" + stats.durationSeconds + "</white> сек."));
         if (stats.winner != null) {
-            sender.sendMessage(Messages.raw("<gold>Победитель: " + stats.winner.colorize(stats.winner.displayName())));
+            sender.sendMessage(Messages.raw("<gold>Победитель: " + stats.winner.colorize(teamDisplay(stats, stats.winner))));
         } else {
             sender.sendMessage(Messages.raw("<gray>Ничья"));
         }
         for (Map.Entry<BattleTeam, BattleStats.TeamSummary> e : stats.teams.entrySet()) {
             BattleStats.TeamSummary s = e.getValue();
-            sender.sendMessage(Messages.raw(e.getKey().colorize(e.getKey().displayName()) + ": <white>" + s.score
+            sender.sendMessage(Messages.raw(e.getKey().colorize(teamDisplay(stats, e.getKey())) + ": <white>" + s.score
                     + " <gray>(убийств: " + s.kills + ", смертей: " + s.deaths + ", тимкиллов: " + s.teamkills
                     + ", точек: " + s.pointsCaptured + ", удержаний: " + s.holdAwards + ")</gray>"));
         }
@@ -714,12 +806,12 @@ public class BattleCommand {
         if (!stats.events.isEmpty()) {
             sender.sendMessage(Messages.raw("<gold>События:"));
             for (StatEvent ev : stats.events) {
-                sender.sendMessage(Messages.raw("  <gray>[" + formatTime(ev.timeSeconds) + "]</gray> " + describe(ev)));
+                sender.sendMessage(Messages.raw("  <gray>[" + formatTime(ev.timeSeconds) + "]</gray> " + describe(stats, ev)));
             }
         }
     }
 
-    private String describe(StatEvent ev) {
+    private String describe(BattleStats stats, StatEvent ev) {
         String killer = ev.killer == null ? null
                 : (ev.team != null ? ev.team.colorize(ev.killer) : "<white>" + ev.killer + "</white>");
         return switch (ev.type) {
@@ -728,13 +820,13 @@ public class BattleCommand {
             case TEAMKILL -> killer + " <red>убил(а) союзника</red> <white>" + ev.victim + "</white> <gray>("
                     + ev.weapon + ")</gray> <yellow>(" + ev.scoreDelta + ")</yellow>";
             case DEATH -> "<white>" + ev.victim + "</white> <gray>погиб(ла)</gray> <yellow>(" + ev.scoreDelta + ")</yellow>";
-            case POINT_START -> (ev.team != null ? ev.team.colorize(ev.team.displayName()) : "")
+            case POINT_START -> (ev.team != null ? ev.team.colorize(teamDisplay(stats, ev.team)) : "")
                     + " <gray>начал(а) захват</gray> <yellow>" + ev.point + "</yellow>";
-            case POINT_CAPTURED -> (ev.team != null ? ev.team.colorize(ev.team.displayName()) : "")
+            case POINT_CAPTURED -> (ev.team != null ? ev.team.colorize(teamDisplay(stats, ev.team)) : "")
                     + " <green>захватил(а)</green> <yellow>" + ev.point + "</yellow>";
-            case POINT_LOST -> (ev.team != null ? ev.team.colorize(ev.team.displayName()) : "")
+            case POINT_LOST -> (ev.team != null ? ev.team.colorize(teamDisplay(stats, ev.team)) : "")
                     + " <red>потерял(а)</red> <yellow>" + ev.point + "</yellow>";
-            case POINT_HOLD -> (ev.team != null ? ev.team.colorize(ev.team.displayName()) : "")
+            case POINT_HOLD -> (ev.team != null ? ev.team.colorize(teamDisplay(stats, ev.team)) : "")
                     + " <gray>удержание точки</gray> <yellow>" + ev.point + "</yellow> <green>(+" + ev.scoreDelta + ")</green>";
             default -> ev.type.name();
         };

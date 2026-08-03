@@ -56,6 +56,11 @@ public enum BattleTeam {
         return label != null && !label.isBlank();
     }
 
+    /** Сырой ярлык команды или {@code null}, если ярлык не установлен. */
+    public String rawLabel() {
+        return label;
+    }
+
     public NamedTextColor textColor() {
         return textColor;
     }

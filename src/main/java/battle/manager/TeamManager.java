@@ -5,6 +5,7 @@ import battle.api.event.TeamChangeEvent;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Statistic;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
@@ -25,6 +26,26 @@ public class TeamManager {
     private final Set<UUID> frozen = new HashSet<>();
     private final Map<UUID, Float> walkSpeeds = new HashMap<>();
     private final Map<UUID, Float> flySpeeds = new HashMap<>();
+    private int minPlaytimeHours = 0;
+
+    /** Требуемое время на сервере (часы) для назначения в команду; 0 — без ограничения. */
+    public int minPlaytimeHours() {
+        return minPlaytimeHours;
+    }
+
+    public void setMinPlaytimeHours(int hours) {
+        this.minPlaytimeHours = Math.max(0, hours);
+    }
+
+    /** Время игрока на сервере в часах (по статистике PLAY_ONE_MINUTE, значение в тиках). */
+    public double playtimeHours(Player player) {
+        return player.getStatistic(Statistic.PLAY_ONE_MINUTE) / 72000.0;
+    }
+
+    /** Может ли игрок быть назначен в команду по требованию времени на сервере. */
+    public boolean meetsPlaytime(Player player) {
+        return minPlaytimeHours <= 0 || playtimeHours(player) >= minPlaytimeHours;
+    }
 
     public void set(Player player, BattleTeam team) {
         assignments.put(player.getUniqueId(), team);

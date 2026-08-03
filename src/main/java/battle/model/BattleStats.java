@@ -22,6 +22,8 @@ public class BattleStats {
         public int teamkills;
         public int pointsCaptured;
         public int holdAwards;
+        /** Ярлык команды на момент битвы (или {@code null}, если ярлык не был установлен). */
+        public String label;
     }
 
     /** Индивидуальная статистика игрока за битву. */
@@ -80,6 +82,7 @@ public class BattleStats {
             t.set("teamkills", s.teamkills);
             t.set("pointsCaptured", s.pointsCaptured);
             t.set("holdAwards", s.holdAwards);
+            t.set("label", s.label);
         }
 
         ConfigurationSection playersSection = section.createSection("players");
@@ -134,6 +137,7 @@ public class BattleStats {
                 s.teamkills = t.getInt("teamkills");
                 s.pointsCaptured = t.getInt("pointsCaptured");
                 s.holdAwards = t.getInt("holdAwards");
+                s.label = t.getString("label");
                 teams.put(team, s);
             }
         }

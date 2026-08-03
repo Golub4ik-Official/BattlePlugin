@@ -87,6 +87,7 @@ public class BattleManager {
         killScore = c.getInt("battle.scoring.kill", 5);
         deathScore = c.getInt("battle.scoring.death", -2);
         teamkillScore = c.getInt("battle.scoring.teamkill", -5);
+        teamManager.setMinPlaytimeHours(c.getInt("team.min-playtime-hours", 0));
     }
 
     public void reload() {
@@ -450,6 +451,7 @@ public class BattleManager {
             s.teamkills = ts.teamkills;
             s.pointsCaptured = ts.pointsCaptured;
             s.holdAwards = ts.holdAwards;
+            s.label = t.hasLabel() ? t.rawLabel() : null;
             teams.put(t, s);
         }
 
