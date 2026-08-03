@@ -1,5 +1,6 @@
 plugins {
     `java`
+    id("com.gradleup.shadow") version "8.3.5"
 }
 
 group = "battle"
@@ -27,6 +28,8 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     // TAB v6 — интеграция цветных ников в табе и над головой (softdepend, см. plugin.yml)
     compileOnly("com.github.NEZNAMY:TAB-API:6.0.0")
+    // SQLite для хранения статистики битв (упаковывается в jar плагина)
+    implementation("org.xerial:sqlite-jdbc:3.46.1.3")
 }
 
 java {
@@ -38,5 +41,16 @@ tasks.withType<JavaCompile> {
 }
 
 tasks.jar {
+    archiveFileName.set("BattlePlugin-${project.version}.jar")
+}
+
+tasks.shadowJar {
     archiveFileName.set("BattlePlugin.jar")
+    mergeServiceFiles()
+    exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/INDEX.LIST", "META-INF/LICENSE*", "META-INF/NOTICE*")
+}
+
+// Финальный артефакт (build/libs/BattlePlugin.jar) — fat-jar со встроенным SQLite-драйвером.
+tasks.assemble {
+    dependsOn(tasks.shadowJar)
 }

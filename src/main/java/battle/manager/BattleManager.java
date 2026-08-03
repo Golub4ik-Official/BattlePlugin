@@ -10,6 +10,7 @@ import battle.model.BattleStats;
 import battle.model.CapturePoint;
 import battle.model.PlayerStats;
 import battle.model.StatEvent;
+import battle.webhook.DiscordWebhook;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
@@ -60,6 +61,8 @@ public class BattleManager {
     private int deathScore;
     private int teamkillScore;
 
+    private DiscordWebhook webhook;
+
     private final Map<CapturePoint, Integer> holdTicks = new HashMap<>();
     private final Map<CapturePoint, TextDisplay> pointDisplays = new HashMap<>();
 
@@ -88,6 +91,7 @@ public class BattleManager {
         deathScore = c.getInt("battle.scoring.death", -2);
         teamkillScore = c.getInt("battle.scoring.teamkill", -5);
         teamManager.setMinPlaytimeHours(c.getInt("team.min-playtime-hours", 0));
+        webhook = new DiscordWebhook(c.getString("discord.webhook-url", ""));
     }
 
     public void reload() {
@@ -475,6 +479,7 @@ public class BattleManager {
                 ended.elapsedSeconds(), winner, teams, players, List.copyOf(ended.events()));
         statsManager.add(stats);
         statsManager.save();
+        webhook.sendAsync(stats);
 
         broadcast(Messages.raw("<gold>═══ Битва завершена! ═══"));
         broadcast(Messages.raw("stop".equals(reason)

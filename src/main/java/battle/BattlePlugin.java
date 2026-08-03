@@ -63,6 +63,7 @@ public class BattlePlugin extends JavaPlugin {
         }
         if (statsManager != null) {
             statsManager.save();
+            statsManager.close();
         }
         if (teamManager != null) {
             teamManager.clearColoredNames();
