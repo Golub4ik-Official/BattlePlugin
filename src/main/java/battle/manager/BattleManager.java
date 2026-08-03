@@ -245,12 +245,16 @@ public class BattleManager {
         killStreak.put(uid, streak);
         lastKillTime.put(uid, time);
 
-        String subtitle = killer.getName() + " <gray>убил(а)</gray> <white>" + victim.getName() + "</white>"
+        BattleTeam killerTeam = teamManager.get(killer);
+        String killerDisplay = killerTeam != null
+                ? killerTeam.colorize(killer.getName())
+                : "<white>" + killer.getName() + "</white>";
+        String subtitle = "<gray>убил(а)</gray> <white>" + victim.getName() + "</white>"
                 + (weapon == null ? "" : " <gray>(" + weapon + ")</gray>");
 
         if (!firstBloodAnnounced) {
             firstBloodAnnounced = true;
-            showAnnouncement(Announcement.FIRST_BLOOD, subtitle);
+            showAnnouncement(Announcement.FIRST_BLOOD, killerDisplay, subtitle);
             return;
         }
         Announcement ann = switch (streak) {
@@ -260,14 +264,14 @@ public class BattleManager {
             default -> streak >= 5 ? Announcement.RAMPAGE : null;
         };
         if (ann != null) {
-            showAnnouncement(ann, subtitle);
+            showAnnouncement(ann, killerDisplay, subtitle);
         }
     }
 
     /** Показывает Title всем участникам битвы и (опционально) проигрывает звук. */
-    private void showAnnouncement(Announcement ann, String subtitle) {
+    private void showAnnouncement(Announcement ann, String killerDisplay, String subtitle) {
         Title.Times times = Title.Times.times(Duration.ofMillis(200), Duration.ofMillis(1800), Duration.ofMillis(400));
-        Component titleComp = Messages.raw(ann.meta);
+        Component titleComp = Messages.raw(killerDisplay + " <gray>—</gray> " + ann.coloredWord());
         Component subComp = Messages.raw(subtitle);
         Title title = Title.title(titleComp, subComp, times);
         for (Player p : participants()) {
@@ -292,22 +296,30 @@ public class BattleManager {
 
     /** Типы анонсов серий убийств. */
     private enum Announcement {
-        FIRST_BLOOD("<gold><bold>FIRST BLOOD</bold></gold>", Sound.ENTITY_ENDER_DRAGON_GROWL, 1.0f, 1.0f),
-        DOUBLE_KILL("<yellow><bold>DOUBLE KILL</bold></yellow>", Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f),
-        TRIPLE_KILL("<gold><bold>TRIPLE KILL</bold></gold>", Sound.BLOCK_BELL_USE, 1.0f, 1.0f),
-        ULTRA_KILL("<red><bold>ULTRA KILL</bold></red>", Sound.ENTITY_WITHER_SPAWN, 1.0f, 1.0f),
-        RAMPAGE("<gradient:#ff5555:#ffaa00><bold>RAMPAGE!</bold></gradient>", Sound.ENTITY_WITHER_DEATH, 1.4f, 0.9f);
+        FIRST_BLOOD("FIRST BLOOD", "<gold><bold>", "</bold></gold>", Sound.ENTITY_ENDER_DRAGON_GROWL, 1.0f, 1.0f),
+        DOUBLE_KILL("DOUBLE KILL", "<yellow><bold>", "</bold></yellow>", Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f),
+        TRIPLE_KILL("TRIPLE KILL", "<gold><bold>", "</bold></gold>", Sound.BLOCK_BELL_USE, 1.0f, 1.0f),
+        ULTRA_KILL("ULTRA KILL", "<red><bold>", "</bold></red>", Sound.ENTITY_WITHER_SPAWN, 1.0f, 1.0f),
+        RAMPAGE("RAMPAGE!", "<gradient:#ff5555:#ffaa00><bold>", "</bold></gradient>", Sound.ENTITY_WITHER_DEATH, 1.4f, 0.9f);
 
-        final String meta;
+        final String word;
+        final String styleOpen;
+        final String styleClose;
         final Sound sound;
         final float volume;
         final float pitch;
 
-        Announcement(String meta, Sound sound, float volume, float pitch) {
-            this.meta = meta;
+        Announcement(String word, String styleOpen, String styleClose, Sound sound, float volume, float pitch) {
+            this.word = word;
+            this.styleOpen = styleOpen;
+            this.styleClose = styleClose;
             this.sound = sound;
             this.volume = volume;
             this.pitch = pitch;
+        }
+
+        String coloredWord() {
+            return styleOpen + word + styleClose;
         }
     }
 
