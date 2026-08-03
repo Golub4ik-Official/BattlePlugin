@@ -26,6 +26,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -76,7 +77,29 @@ public class BattleCommand {
                                         .executes(this::teamRemove)))
                         .then(Commands.literal("list")
                                 .requires(s -> s.getSender().hasPermission("battle.status"))
-                                .executes(this::teamList)))
+                                .executes(this::teamList))
+                        .then(Commands.literal("tp")
+                                .requires(s -> s.getSender().hasPermission("battle.admin"))
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .suggests(this::suggestTeams)
+                                        .executes(this::teamTeleportHere)
+                                        .then(Commands.argument("target", ArgumentTypes.player())
+                                                .executes(this::teamTeleportTo))))
+                        .then(Commands.literal("freeze")
+                                .requires(s -> s.getSender().hasPermission("battle.admin"))
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .suggests(this::suggestTeams)
+                                        .executes(this::teamFreeze)))
+                        .then(Commands.literal("unfreeze")
+                                .requires(s -> s.getSender().hasPermission("battle.admin"))
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .suggests(this::suggestTeams)
+                                        .executes(this::teamUnfreeze)))
+                        .then(Commands.literal("giveinv")
+                                .requires(s -> s.getSender().hasPermission("battle.admin"))
+                                .then(Commands.argument("team", StringArgumentType.word())
+                                        .suggests(this::suggestTeams)
+                                        .executes(this::teamGiveInv))))
                 .then(Commands.literal("start")
                         .requires(s -> s.getSender().hasPermission("battle.admin"))
                         .then(Commands.argument("minutes", IntegerArgumentType.integer(1, 1440))
@@ -212,6 +235,140 @@ public class BattleCommand {
                     + " <gray>→</gray> " + e.getValue().colorize(e.getValue().displayName())));
         }
         return 1;
+    }
+
+    private BattleTeam resolveTeam(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        CommandSender sender = ctx.getSource().getSender();
+        String teamName = ctx.getArgument("team", String.class);
+        BattleTeam team = BattleTeam.fromString(teamName);
+        if (team == null) {
+            sender.sendMessage(Messages.msg("<red>Неизвестная команда: <white>" + teamName
+                    + "</white>. Доступные: red, blue, green, yellow."));
+        }
+        return team;
+    }
+
+    private int teamTeleportHere(CommandContext<CommandSourceStack> ctx) {
+        CommandSender sender = ctx.getSource().getSender();
+        if (!(sender instanceof Player admin)) {
+            sender.sendMessage(Messages.msg("<red>Команда доступна только игроку."));
+            return 1;
+        }
+        return teleportTeam(sender, admin, ctx);
+    }
+
+    private int teamTeleportTo(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        CommandSender sender = ctx.getSource().getSender();
+        List<Player> targets = ctx.getArgument("target", PlayerSelectorArgumentResolver.class).resolve(ctx.getSource());
+        if (targets.isEmpty()) {
+            sender.sendMessage(Messages.msg("<red>Игрок не найден."));
+            return 1;
+        }
+        return teleportTeam(sender, targets.get(0), ctx);
+    }
+
+    private int teleportTeam(CommandSender sender, Player target, CommandContext<CommandSourceStack> ctx) {
+        try {
+            BattleTeam team = resolveTeam(ctx);
+            if (team == null) {
+                return 1;
+            }
+            List<Player> members = teamManager.onlineMembers(team);
+            if (members.isEmpty()) {
+                sender.sendMessage(Messages.msg("<gray>В команде " + team.colorize(team.displayName())
+                        + " <gray>нет онлайн-игроков."));
+                return 1;
+            }
+            Location loc = target.getLocation();
+            int count = 0;
+            for (Player member : members) {
+                if (member.equals(target)) {
+                    continue;
+                }
+                member.teleport(loc);
+                count++;
+            }
+            sender.sendMessage(Messages.msg("<green>Команда</green> " + team.colorize(team.displayName())
+                    + " <green>телепортирована к</green> <white>" + target.getName() + "</white> <gray>("
+                    + count + " игр.).</gray>"));
+            return 1;
+        } catch (CommandSyntaxException e) {
+            return 1;
+        }
+    }
+
+    private int teamFreeze(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        CommandSender sender = ctx.getSource().getSender();
+        BattleTeam team = resolveTeam(ctx);
+        if (team == null) {
+            return 1;
+        }
+        List<Player> members = teamManager.onlineMembers(team);
+        if (members.isEmpty()) {
+            sender.sendMessage(Messages.msg("<gray>В команде " + team.colorize(team.displayName())
+                    + " <gray>нет онлайн-игроков."));
+            return 1;
+        }
+        teamManager.freeze(team);
+        sender.sendMessage(Messages.msg("<yellow>Команда</yellow> " + team.colorize(team.displayName())
+                + " <yellow>заморожена</yellow> <gray>(" + members.size() + " игр.).</gray>"));
+        return 1;
+    }
+
+    private int teamUnfreeze(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        CommandSender sender = ctx.getSource().getSender();
+        BattleTeam team = resolveTeam(ctx);
+        if (team == null) {
+            return 1;
+        }
+        List<Player> members = teamManager.onlineMembers(team);
+        if (members.isEmpty()) {
+            sender.sendMessage(Messages.msg("<gray>В команде " + team.colorize(team.displayName())
+                    + " <gray>нет онлайн-игроков."));
+            return 1;
+        }
+        teamManager.unfreeze(team);
+        sender.sendMessage(Messages.msg("<green>Команда</green> " + team.colorize(team.displayName())
+                + " <green>разморожена</green> <gray>(" + members.size() + " игр.).</gray>"));
+        return 1;
+    }
+
+    private int teamGiveInv(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        CommandSender sender = ctx.getSource().getSender();
+        if (!(sender instanceof Player admin)) {
+            sender.sendMessage(Messages.msg("<red>Команда доступна только игроку."));
+            return 1;
+        }
+        BattleTeam team = resolveTeam(ctx);
+        if (team == null) {
+            return 1;
+        }
+        List<Player> members = teamManager.onlineMembers(team);
+        if (members.isEmpty()) {
+            sender.sendMessage(Messages.msg("<gray>В команде " + team.colorize(team.displayName())
+                    + " <gray>нет онлайн-игроков."));
+            return 1;
+        }
+        ItemStack[] contents = deepCopy(admin.getInventory().getContents());
+        for (Player member : members) {
+            if (member.equals(admin)) {
+                continue;
+            }
+            member.getInventory().clear();
+            member.getInventory().setContents(deepCopy(contents));
+            member.updateInventory();
+        }
+        sender.sendMessage(Messages.msg("<green>Инвентарь скопирован команде</green> " + team.colorize(team.displayName())
+                + " <green>(" + members.size() + " игр.).</green>"));
+        return 1;
+    }
+
+    private ItemStack[] deepCopy(ItemStack[] source) {
+        ItemStack[] copy = new ItemStack[source.length];
+        for (int i = 0; i < source.length; i++) {
+            copy[i] = source[i] == null ? null : source[i].clone();
+        }
+        return copy;
     }
 
     @SuppressWarnings("unchecked")

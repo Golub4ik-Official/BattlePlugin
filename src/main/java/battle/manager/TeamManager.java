@@ -8,8 +8,10 @@ import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.Team;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -18,6 +20,9 @@ import java.util.UUID;
 public class TeamManager {
 
     private final Map<UUID, BattleTeam> assignments = new HashMap<>();
+    private final Set<UUID> frozen = new HashSet<>();
+    private final Map<UUID, Float> walkSpeeds = new HashMap<>();
+    private final Map<UUID, Float> flySpeeds = new HashMap<>();
 
     public void set(Player player, BattleTeam team) {
         assignments.put(player.getUniqueId(), team);
@@ -26,6 +31,7 @@ public class TeamManager {
 
     public void remove(Player player) {
         assignments.remove(player.getUniqueId());
+        clearFrozen(player);
         refreshColoredNames();
     }
 
@@ -39,6 +45,59 @@ public class TeamManager {
 
     public Map<UUID, BattleTeam> all() {
         return assignments;
+    }
+
+    /** Замораживает всех онлайн-игроков команды (запрет движения). */
+    public void freeze(BattleTeam team) {
+        for (Player p : onlineMembers(team)) {
+            freeze(p);
+        }
+    }
+
+    /** Замораживает одного игрока. */
+    public void freeze(Player p) {
+        UUID id = p.getUniqueId();
+        if (!frozen.add(id)) {
+            return;
+        }
+        walkSpeeds.put(id, p.getWalkSpeed());
+        flySpeeds.put(id, p.getFlySpeed());
+        p.setWalkSpeed(0.0f);
+        p.setFlySpeed(0.0f);
+    }
+
+    /** Размораживает всех онлайн-игроков команды. */
+    public void unfreeze(BattleTeam team) {
+        for (Player p : onlineMembers(team)) {
+            unfreeze(p);
+        }
+    }
+
+    /** Размораживает одного игрока. */
+    public void unfreeze(Player p) {
+        UUID id = p.getUniqueId();
+        if (!frozen.remove(id)) {
+            return;
+        }
+        Float walk = walkSpeeds.remove(id);
+        Float fly = flySpeeds.remove(id);
+        p.setWalkSpeed(walk == null ? 0.2f : walk);
+        p.setFlySpeed(fly == null ? 0.1f : fly);
+    }
+
+    /** Заморожен ли игрок. */
+    public boolean isFrozen(Player player) {
+        return frozen.contains(player.getUniqueId());
+    }
+
+    /** Заморожен ли игрок по UUID. */
+    public boolean isFrozen(UUID uuid) {
+        return frozen.contains(uuid);
+    }
+
+    /** Очищает заморозку у игрока (при выходе). */
+    public void clearFrozen(Player player) {
+        unfreeze(player);
     }
 
     /** Онлайн-игроки заданной команды. */

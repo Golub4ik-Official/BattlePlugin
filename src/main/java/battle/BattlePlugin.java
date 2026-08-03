@@ -37,7 +37,7 @@ public class BattlePlugin extends JavaPlugin {
                 scoreboardManager, bossBarManager, statsManager);
 
         getServer().getPluginManager().registerEvents(
-                new BattleListener(battleManager, scoreboardManager, bossBarManager), this);
+                new BattleListener(battleManager, scoreboardManager, bossBarManager, teamManager), this);
 
         getServer().getScheduler().runTaskTimer(this,
                 () -> teamManager.refreshColoredNames(), 20L, 20L);

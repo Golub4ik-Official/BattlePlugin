@@ -52,6 +52,10 @@
 | `/battle team set <игрок> <команда>` | Назначить игрока в команду | `battle.team.set` |
 | `/battle team remove <игрок>` | Убрать игрока из команд | `battle.admin` |
 | `/battle team list` | Список игроков по командам | `battle.status` |
+| `/battle team tp <команда> [игрок]` | Телепортировать команду к себе (или к игроку) | `battle.admin` |
+| `/battle team freeze <команда>` | Заморозить команду (запрет движения) | `battle.admin` |
+| `/battle team unfreeze <команда>` | Разморозить команду | `battle.admin` |
+| `/battle team giveinv <команда>` | Скопировать инвентарь админа (включая броню) всей команде | `battle.admin` |
 | `/battle start <минуты> <команда1> <команда2> [команда3] [команда4] <название>` | Начать битву | `battle.admin` |
 | `/battle stop` | Остановить битву | `battle.admin` |
 | `/battle status` | Статус текущей битвы | `battle.status` |
