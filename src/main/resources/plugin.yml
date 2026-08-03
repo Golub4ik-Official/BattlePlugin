@@ -1,9 +1,10 @@
 name: BattlePlugin
-version: 1.1.0
+version: 1.2.0
 main: battle.BattlePlugin
 api-version: '1.21.11'
 description: Плагин для ведения битв между командами с захватом точек.
 author: Golub4ik
+softdepend: [TAB]
 
 permissions:
   battle.admin:

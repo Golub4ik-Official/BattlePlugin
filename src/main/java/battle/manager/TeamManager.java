@@ -2,6 +2,7 @@ package battle.manager;
 
 import battle.BattleTeam;
 import battle.api.event.TeamChangeEvent;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
@@ -27,6 +28,7 @@ public class TeamManager {
 
     public void set(Player player, BattleTeam team) {
         assignments.put(player.getUniqueId(), team);
+        player.displayName(Component.text(player.getName()).color(team.textColor()));
         Bukkit.getPluginManager().callEvent(new TeamChangeEvent(player.getUniqueId(), team));
         refreshColoredNames();
     }
@@ -34,6 +36,7 @@ public class TeamManager {
     public void remove(Player player) {
         assignments.remove(player.getUniqueId());
         clearFrozen(player);
+        player.displayName(Component.text(player.getName()));
         Bukkit.getPluginManager().callEvent(new TeamChangeEvent(player.getUniqueId(), null));
         refreshColoredNames();
     }
@@ -103,6 +106,18 @@ public class TeamManager {
         unfreeze(player);
     }
 
+    /** Повторно применяет окраску одному игроку (при входе/релоаде TAB). */
+    public void refresh(Player player) {
+        BattleTeam team = get(player);
+        if (team != null) {
+            player.displayName(Component.text(player.getName()).color(team.textColor()));
+            TabHook.apply(player, team);
+        } else {
+            player.displayName(Component.text(player.getName()));
+            TabHook.reset(player);
+        }
+    }
+
     /** Онлайн-игроки заданной команды. */
     public List<Player> onlineMembers(BattleTeam team) {
         return Bukkit.getOnlinePlayers().stream()
@@ -116,10 +131,22 @@ public class TeamManager {
     }
 
     /**
-     * Перекрашивает ник игроков в цвет их команды на дашборде каждого онлайн-игрока.
-     * Работает для всех зрителей независимо от их личного scoreboard.
+     * Перекрашивает ник игроков в цвет их команды.
+     * Если установлен TAB — цвет применяется через TAB API (таб + nametag);
+     * иначе через scoreboard-темы на дашборде каждого онлайн-игрока.
      */
     public void refreshColoredNames() {
+        if (TabHook.isAvailable()) {
+            for (Player viewer : Bukkit.getOnlinePlayers()) {
+                BattleTeam team = get(viewer);
+                if (team != null) {
+                    TabHook.apply(viewer, team);
+                } else {
+                    TabHook.reset(viewer);
+                }
+            }
+            return;
+        }
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             Scoreboard sb = viewer.getScoreboard();
             if (sb == null) {
@@ -160,6 +187,8 @@ public class TeamManager {
     /** Убирает цветовые команды со всех scoreboard игроков (при отключении/уборке). */
     public void clearColoredNames() {
         for (Player viewer : Bukkit.getOnlinePlayers()) {
+            TabHook.reset(viewer);
+            viewer.displayName(Component.text(viewer.getName()));
             Scoreboard sb = viewer.getScoreboard();
             if (sb == null) {
                 continue;

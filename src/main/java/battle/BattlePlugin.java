@@ -9,6 +9,7 @@ import battle.manager.BattleManager;
 import battle.manager.PointManager;
 import battle.manager.ScoreboardManager;
 import battle.manager.StatsManager;
+import battle.manager.TabHook;
 import battle.manager.TeamManager;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -30,6 +31,7 @@ public class BattlePlugin extends JavaPlugin {
         saveDefaultConfig();
 
         teamManager = new TeamManager();
+        TabHook.init(this, teamManager);
         pointManager = new PointManager();
         scoreboardManager = new ScoreboardManager();
         bossBarManager = new BossBarManager(this, pointManager);
@@ -65,6 +67,7 @@ public class BattlePlugin extends JavaPlugin {
         if (teamManager != null) {
             teamManager.clearColoredNames();
         }
+        TabHook.disable();
         getLogger().info("BattlePlugin выключен.");
     }
 

@@ -44,6 +44,7 @@ public class BattleListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         battleManager.refreshDisplays();
+        teamManager.refresh(event.getPlayer());
     }
 
     @EventHandler(ignoreCancelled = true)

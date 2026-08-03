@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "battle"
-version = "1.1.0"
+version = "1.2.0"
 
 repositories {
     mavenCentral()
@@ -15,12 +15,18 @@ repositories {
         name = "papermc-snapshots"
         url = uri("https://repo.papermc.io/repository/maven-snapshots/")
     }
+    maven {
+        name = "jitpack"
+        url = uri("https://jitpack.io")
+    }
 }
 
 dependencies {
     // Paper 1.21.11 запускается на Java 21: API-артефакт paper-api 1.21.11-R0.1-SNAPSHOT
     // собран для Java 21 (в отличие от 26.2.build.+, требующего Java 25).
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    // TAB v6 — интеграция цветных ников в табе и над головой (softdepend, см. plugin.yml)
+    compileOnly("com.github.NEZNAMY:TAB-API:6.0.0")
 }
 
 java {
