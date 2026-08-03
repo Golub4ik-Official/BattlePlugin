@@ -3,6 +3,12 @@ battle:
   default-duration-minutes: 30
   # Время, показываемое перед завершением битвы (в секундах)
   end-countdown-seconds: 10
+  # Обратный отсчёт перед началом битвы (в секундах); 0 — начать сразу
+  start-countdown-seconds: 10
+  # Звуки обратного отсчёта перед началом битвы
+  start-countdown-sounds: true
+  # Звуки обратного отсчёта перед завершением битвы
+  end-countdown-sounds: true
   capture:
     # Радиус захвата точки (блоки)
     radius: 10

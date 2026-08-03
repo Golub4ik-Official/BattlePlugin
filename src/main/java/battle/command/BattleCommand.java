@@ -207,7 +207,7 @@ public class BattleCommand {
         }
         if (admin) {
             sender.sendMessage(Messages.raw("<yellow>/battle start <минуты> <команда1> <команда2> [команда3] [команда4] <название></yellow> <gray>— начать битву</gray>"));
-            sender.sendMessage(Messages.raw("<yellow>/battle stop</yellow> <gray>— остановить битву</gray>"));
+            sender.sendMessage(Messages.raw("<yellow>/battle stop</yellow> <gray>— остановить битву / отменить отсчёт</gray>"));
             sender.sendMessage(Messages.raw("<yellow>/battle point add <название></yellow> <gray>— добавить точку на месте игрока</gray>"));
             sender.sendMessage(Messages.raw("<yellow>/battle point remove <название></yellow> <gray>— удалить точку</gray>"));
             sender.sendMessage(Messages.raw("<yellow>/battle reload</yellow> <gray>— перезагрузить конфиг</gray>"));
@@ -488,6 +488,11 @@ public class BattleCommand {
 
     private int status(CommandContext<CommandSourceStack> ctx) {
         CommandSender sender = ctx.getSource().getSender();
+        int countdown = battleManager.countdownRemaining();
+        if (countdown > 0) {
+            sender.sendMessage(Messages.raw("<gold>Битва начнётся через <white>" + countdown + " <gold>сек."));
+            return 1;
+        }
         Battle battle = battleManager.getActiveBattle();
         if (battle == null) {
             sender.sendMessage(Messages.msg("<gray>Битва не идёт."));

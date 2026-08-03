@@ -53,9 +53,14 @@ public class BattleManager {
 
     private Battle battle;
     private BukkitTask tickTask;
+    private BukkitTask countdownTask;
+    private int countdownRemaining;
 
     private int defaultDurationMinutes;
     private int endCountdown;
+    private int startCountdownSeconds;
+    private boolean startCountdownSounds;
+    private boolean endCountdownSounds;
     private int captureRadius;
     private int captureTime;
     private int holdScore;
@@ -92,6 +97,9 @@ public class BattleManager {
         var c = plugin.getConfig();
         defaultDurationMinutes = c.getInt("battle.default-duration-minutes", 30);
         endCountdown = c.getInt("battle.end-countdown-seconds", 10);
+        startCountdownSeconds = c.getInt("battle.start-countdown-seconds", 10);
+        startCountdownSounds = c.getBoolean("battle.start-countdown-sounds", true);
+        endCountdownSounds = c.getBoolean("battle.end-countdown-sounds", true);
         captureRadius = c.getInt("battle.capture.radius", 10);
         captureTime = c.getInt("battle.capture.time-seconds", 30);
         holdScore = c.getInt("battle.capture.hold-score", 1);
@@ -129,11 +137,15 @@ public class BattleManager {
         return team != null && battle.teams().contains(team);
     }
 
-    /** Запускает новую битву. Возвращает {@code false}, если битва уже идёт. */
+    /** Запускает новую битву. Возвращает {@code false}, если битва уже идёт или идёт обратный отсчёт. */
     public boolean start(CommandSender starter, String name, int minutes, Set<BattleTeam> teams) {
         if (battle != null) {
             starter.sendMessage(Messages.msg("<red>Битва <yellow>" + battle.name()
                     + "</yellow> уже идёт. Сначала остановите её."));
+            return false;
+        }
+        if (countdownTask != null) {
+            starter.sendMessage(Messages.msg("<red>Уже идёт обратный отсчёт до начала битвы."));
             return false;
         }
         if (teams.size() < 2) {
@@ -142,6 +154,44 @@ public class BattleManager {
         }
 
         int seconds = Math.max(1, minutes) * 60;
+        startCountdown(name, seconds, teams);
+        return true;
+    }
+
+    /** Обратный отсчёт перед началом битвы, чтобы игроки успели подготовиться. */
+    private void startCountdown(String name, int seconds, Set<BattleTeam> teams) {
+        broadcast(Messages.raw("<gold>═══ Битва скоро начнётся! ═══"));
+        broadcast(Messages.raw("<gold>Название: <white>" + name));
+        broadcast(Messages.raw("<gold>Длительность: <white>" + (seconds / 60) + " <gold>мин."));
+        broadcast(Messages.raw("<gold>Команды: <white>" + formatTeams(teams)));
+
+        if (startCountdownSeconds <= 0) {
+            beginBattle(name, seconds, teams);
+            return;
+        }
+        broadcast(Messages.raw("<red>Готовьтесь! Битва начнётся через <white>"
+                + startCountdownSeconds + " <red>сек."));
+        playSoundToTeams(teams, Sound.BLOCK_NOTE_BLOCK_HAT, 1.0f, 1.0f);
+
+        countdownRemaining = startCountdownSeconds;
+        countdownTask = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            countdownRemaining--;
+            if (countdownRemaining <= 0) {
+                countdownTask.cancel();
+                countdownTask = null;
+                beginBattle(name, seconds, teams);
+                return;
+            }
+            broadcast(Messages.raw("<yellow>Битва начнётся через <white>"
+                    + countdownRemaining + " <yellow>сек."));
+            boolean urgent = countdownRemaining <= 3;
+            playSoundToTeams(teams, urgent ? Sound.BLOCK_NOTE_BLOCK_PLING : Sound.BLOCK_NOTE_BLOCK_HAT,
+                    1.0f, urgent ? 1.2f : 1.0f);
+        }, 20L, 20L);
+    }
+
+    /** Непосредственный старт битвы после обратного отсчёта. */
+    private void beginBattle(String name, int seconds, Set<BattleTeam> teams) {
         battle = new Battle(name, seconds, teams);
         pointManager.resetAll();
         holdTicks.clear();
@@ -151,18 +201,24 @@ public class BattleManager {
 
         broadcast(Messages.raw("<gold>═══ Битва началась! ═══"));
         broadcast(Messages.raw("<gold>Название: <white>" + name));
-        broadcast(Messages.raw("<gold>Длительность: <white>" + minutes + " <gold>мин."));
+        broadcast(Messages.raw("<gold>Длительность: <white>" + (seconds / 60) + " <gold>мин."));
         broadcast(Messages.raw("<gold>Команды: <white>" + formatTeams(teams)));
+        playSoundToTeams(teams, Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
 
         plugin.getServer().getPluginManager().callEvent(new BattleStartedEvent(name, seconds, teams));
 
         refreshDisplays();
         updatePointDisplays();
         tickTask = plugin.getServer().getScheduler().runTaskTimer(plugin, this::tick, 20L, 20L);
-        return true;
     }
 
     public void stop(CommandSender stopper) {
+        if (countdownTask != null) {
+            countdownTask.cancel();
+            countdownTask = null;
+            broadcast(Messages.raw("<red>Запуск битвы отменён."));
+            return;
+        }
         if (battle == null) {
             stopper.sendMessage(Messages.msg("<red>Битва не идёт."));
             return;
@@ -172,6 +228,10 @@ public class BattleManager {
 
     /** Вызывается при отключении плагина: останавливает битву и сохраняет статистику. */
     public void shutdown() {
+        if (countdownTask != null) {
+            countdownTask.cancel();
+            countdownTask = null;
+        }
         if (tickTask != null) {
             tickTask.cancel();
             tickTask = null;
@@ -294,6 +354,20 @@ public class BattleManager {
         return list;
     }
 
+    /** Осталось секунд до старта битвы (0 — обратного отсчёта нет). */
+    public int countdownRemaining() {
+        return countdownTask == null ? 0 : countdownRemaining;
+    }
+
+    /** Проигрывает звук всем онлайн-игрокам заданных команд. */
+    private void playSoundToTeams(Set<BattleTeam> teams, Sound sound, float volume, float pitch) {
+        for (BattleTeam t : teams) {
+            for (Player p : teamManager.onlineMembers(t)) {
+                p.playSound(p.getLocation(), sound, volume, pitch);
+            }
+        }
+    }
+
     /** Типы анонсов серий убийств. */
     private enum Announcement {
         FIRST_BLOOD("FIRST BLOOD", "<gold><bold>", "</bold></gold>", Sound.ENTITY_ENDER_DRAGON_GROWL, 1.0f, 1.0f),
@@ -370,6 +444,13 @@ public class BattleManager {
         int remaining = battle.remainingSeconds();
         if (remaining <= endCountdown && remaining > 0) {
             broadcast(Messages.raw("<red>Битва завершится через <white>" + remaining + " <red>сек."));
+            if (endCountdownSounds) {
+                boolean urgent = remaining <= 3;
+                Sound sound = urgent ? Sound.BLOCK_NOTE_BLOCK_PLING : Sound.BLOCK_NOTE_BLOCK_HAT;
+                for (Player p : participants()) {
+                    p.playSound(p.getLocation(), sound, 1.0f, urgent ? 1.2f : 1.0f);
+                }
+            }
         } else if (remaining <= 300 && remaining > 0 && remaining % 60 == 0) {
             broadcast(Messages.raw("<gold>До конца битвы: <white>" + (remaining / 60) + " <gold>мин."));
         }
