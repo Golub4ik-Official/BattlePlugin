@@ -1,5 +1,5 @@
 name: BattlePlugin
-version: 1.4.0
+version: 1.5.0
 main: battle.BattlePlugin
 api-version: '1.21.11'
 description: Плагин для ведения битв между командами с захватом точек.
@@ -15,6 +15,8 @@ permissions:
   battle.team.set:
     description: Доступ к команде /battle team set
     default: false
+    children:
+      pv.addon.groups.*: true
   battle.status:
     description: Просмотр статуса и статистики битв
     default: true

@@ -8,6 +8,7 @@ import org.bukkit.entity.Player;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -39,6 +40,7 @@ public final class VoiceGroupsHook {
     private boolean available = false;
     private boolean enabled = true;
     private String channelPrefix = "Битва";
+    private boolean passwordProtected = true;
 
     private Object groupManager;
     private Object voiceServer;
@@ -60,6 +62,7 @@ public final class VoiceGroupsHook {
     private void readConfig() {
         enabled = plugin.getConfig().getBoolean("battle.voice-groups.enabled", true);
         channelPrefix = plugin.getConfig().getString("battle.voice-groups.channel-prefix", "Битва");
+        passwordProtected = plugin.getConfig().getBoolean("battle.voice-groups.password-protected", true);
     }
 
     /** Повторно читает конфиг и перепроверяет доступность аддона (команда /battle reload). */
@@ -214,7 +217,7 @@ public final class VoiceGroupsHook {
             Constructor<?> ctor = groupClass.getConstructor(playerSetClass, UUID.class, String.class, String.class,
                     boolean.class, Set.class, List.class, gameProfileClass);
             Object group = ctor.newInstance(playerSet, UUID.randomUUID(),
-                    channelName(team), null, true,
+                    channelName(team), passwordProtected ? randomPassword() : null, true,
                     new HashSet<UUID>(), new ArrayList<>(), null);
 
             // Регистрируем группу в аддоне, чтобы она была видна в /groups browse.
@@ -236,6 +239,18 @@ public final class VoiceGroupsHook {
                 ? team.displayName()
                 : channelPrefix + " · " + team.displayName();
         return base.replace('§', ' ');
+    }
+
+    private static final char[] PASSWORD_CHARS = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
+    private static final SecureRandom PASSWORD_RANDOM = new SecureRandom();
+
+    /** Случайный пароль канала — ручной /groups join без пароля не пройдёт (авто-подключение игнорирует пароль). */
+    private String randomPassword() {
+        StringBuilder sb = new StringBuilder(12);
+        for (int i = 0; i < 12; i++) {
+            sb.append(PASSWORD_CHARS[PASSWORD_RANDOM.nextInt(PASSWORD_CHARS.length)]);
+        }
+        return sb.toString();
     }
 
     /** Подключает Bukkit-игрока к группе (без эффекта, если у игрока нет голосового чата). */
