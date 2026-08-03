@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -201,6 +202,21 @@ public class BattleManager {
             broadcast(Messages.raw(victimTeam.colorize(victim.getName()) + " <gray>погиб(ла)</gray> <yellow>(" + deathScore + ")</yellow>"));
         }
         refreshDisplays();
+    }
+
+    /** Учёт урона, нанесённого противнику (только по врагам). */
+    public void onDamage(Player victim, Player attacker, double damage) {
+        if (battle == null || !isParticipant(victim) || damage <= 0) {
+            return;
+        }
+        battle.statsOf(victim.getUniqueId(), victim.getName()).addDamageTaken(damage);
+        if (attacker != null && isParticipant(attacker)) {
+            BattleTeam attackerTeam = teamManager.get(attacker);
+            BattleTeam victimTeam = teamManager.get(victim);
+            if (attackerTeam != null && victimTeam != null && attackerTeam != victimTeam) {
+                battle.statsOf(attacker.getUniqueId(), attacker.getName()).addDamageDealt(damage);
+            }
+        }
     }
 
     /** Обновляет дашборды и полосы у всех участников битвы. */
@@ -460,6 +476,7 @@ public class BattleManager {
         }
 
         List<BattleStats.PlayerSummary> players = new ArrayList<>();
+        Set<UUID> seen = new HashSet<>();
         for (Map.Entry<UUID, PlayerStats> e : ended.playerStats().entrySet()) {
             PlayerStats ps = e.getValue();
             BattleStats.PlayerSummary summary = new BattleStats.PlayerSummary();
@@ -470,8 +487,25 @@ public class BattleManager {
             summary.deaths = ps.deaths();
             summary.teamkills = ps.teamkills();
             summary.bestStreak = ps.bestStreak();
+            summary.worstDeathStreak = ps.worstDeathStreak();
             summary.pointsCaptured = ps.pointsCaptured();
+            summary.damageDealt = ps.damageDealt();
+            summary.damageTaken = ps.damageTaken();
             players.add(summary);
+            seen.add(ps.uuid());
+        }
+        // Полный состав: игроки, назначенные в команды битвы, но не совершившие ни одного события.
+        for (Map.Entry<UUID, BattleTeam> e : teamManager.all().entrySet()) {
+            UUID uuid = e.getKey();
+            if (seen.contains(uuid) || !ended.teams().contains(e.getValue())) {
+                continue;
+            }
+            BattleStats.PlayerSummary roster = new BattleStats.PlayerSummary();
+            roster.uuid = uuid;
+            String name = Bukkit.getOfflinePlayer(uuid).getName();
+            roster.name = name == null ? "?" : name;
+            roster.team = e.getValue();
+            players.add(roster);
         }
         players.sort(Comparator.comparingInt((BattleStats.PlayerSummary s) -> s.kills).reversed());
 

@@ -6,8 +6,11 @@ import battle.manager.ScoreboardManager;
 import battle.manager.TeamManager;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
@@ -39,6 +42,26 @@ public class BattleListener implements Listener {
             killer = p;
         }
         battleManager.onPlayerDeath(victim, killer);
+    }
+
+    /** Учёт урона по игрокам битвы (для статистики нанесённого/полученного урона). */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player victim)) {
+            return;
+        }
+        Player attacker = null;
+        if (event.getDamager() instanceof Player p) {
+            attacker = p;
+        } else if (event.getDamager() instanceof Projectile projectile
+                && projectile.getShooter() instanceof Player p) {
+            attacker = p;
+        }
+        double damage = event.getFinalDamage();
+        if (damage <= 0) {
+            return;
+        }
+        battleManager.onDamage(victim, attacker, damage);
     }
 
     @EventHandler

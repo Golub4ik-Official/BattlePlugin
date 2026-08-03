@@ -29,7 +29,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -156,6 +160,17 @@ public class BattleCommand {
                                         .requires(s -> s.getSender().hasPermission("battle.stats.others"))
                                         .then(Commands.argument("name", StringArgumentType.word())
                                                 .executes(this::statsPlayer)))))
+                .then(Commands.literal("top")
+                        .requires(s -> s.getSender().hasPermission("battle.status"))
+                        .executes(ctx -> top(ctx, "kills"))
+                        .then(Commands.argument("metric", StringArgumentType.word())
+                                .suggests((ctx, builder) -> {
+                                    for (String m : List.of("kills", "kd", "damage", "captures")) {
+                                        builder.suggest(m);
+                                    }
+                                    return builder.buildFuture();
+                                })
+                                .executes(ctx -> top(ctx, ctx.getArgument("metric", String.class)))))
                 .then(Commands.literal("history")
                         .requires(s -> s.getSender().hasPermission("battle.status"))
                         .executes(this::history))
@@ -187,6 +202,7 @@ public class BattleCommand {
             sender.sendMessage(Messages.raw("<yellow>/battle stats <id> team <команда></yellow> <gray>— статистика команды</gray>"));
             sender.sendMessage(Messages.raw("<yellow>/battle stats <id> me</yellow> <gray>— ваша личная статистика</gray>"));
             sender.sendMessage(Messages.raw("<yellow>/battle stats <id> player <ник></yellow> <gray>— статистика игрока (перм. battle.stats.others)</gray>"));
+            sender.sendMessage(Messages.raw("<yellow>/battle top [kills|kd|damage|captures]</yellow> <gray>— топ игроков за всё время</gray>"));
             sender.sendMessage(Messages.raw("<yellow>/battle history</yellow> <gray>— история завершённых битв</gray>"));
         }
         if (admin) {
@@ -645,6 +661,16 @@ public class BattleCommand {
                 + "    <gray>Тимкиллов: <white>" + s.teamkills));
         sender.sendMessage(Messages.raw("<gray>Точек захвачено: <white>" + s.pointsCaptured
                 + "    <gray>Удержаний: <white>" + s.holdAwards));
+        int teamDamageDealt = stats.players.stream()
+                .filter(ps -> ps.team == team)
+                .mapToInt(ps -> ps.damageDealt)
+                .sum();
+        int teamDamageTaken = stats.players.stream()
+                .filter(ps -> ps.team == team)
+                .mapToInt(ps -> ps.damageTaken)
+                .sum();
+        sender.sendMessage(Messages.raw("<gray>Урон: нанесён <white>" + teamDamageDealt
+                + "</white> / получен <white>" + teamDamageTaken));
         sender.sendMessage(Messages.raw("<gold>Игроки команды:"));
         for (BattleStats.PlayerSummary ps : stats.players) {
             if (ps.team != team) {
@@ -652,7 +678,8 @@ public class BattleCommand {
             }
             sender.sendMessage(Messages.raw("  " + team.colorize(ps.name)
                     + "<gray>: <white>" + ps.kills + " К / " + ps.deaths + " С / " + ps.teamkills + " ТК"
-                    + " <gray>[</gray><green>K/D " + ps.kd() + "</green><gray>]</gray>"));
+                    + " <gray>[</gray><green>K/D " + ps.kd() + "</green><gray>]</gray>"
+                    + " <gray>урон " + ps.damageDealt + " / серия смертей " + ps.worstDeathStreak + "</gray>"));
         }
     }
 
@@ -669,11 +696,16 @@ public class BattleCommand {
                 + "    <red>Тимкиллов: <white>" + ps.teamkills));
         sender.sendMessage(Messages.raw("<green>K/D: <white>" + ps.kd()
                 + "    <yellow>Лучшая серия: <white>" + ps.bestStreak
+                + "    <red>Худшая серия смертей: <white>" + ps.worstDeathStreak
                 + "    <yellow>Точек захвачено: <white>" + ps.pointsCaptured));
+        sender.sendMessage(Messages.raw("<gray>Урон: нанёс <white>" + ps.damageDealt
+                + "</white> / получил <white>" + ps.damageTaken));
 
         Map<String, Integer> victims = sortedByCount(killsPerVictim(stats, ps.name));
         Map<String, Integer> tkVictims = sortedByCount(teamkillsPerVictim(stats, ps.name));
         Map<String, Integer> killers = sortedByCount(deathsPerKiller(stats, ps.name));
+        Map<String, Integer> killWeapons = sortedByCount(weaponsOf(stats, ps.name, true));
+        Map<String, Integer> deathWeapons = sortedByCount(weaponsOf(stats, ps.name, false));
         int environmentDeaths = deathsWithoutKiller(stats, ps.name);
         if (!victims.isEmpty()) {
             sender.sendMessage(Messages.raw("<green>Убил(а):</green> " + formatOpponents(victims)));
@@ -681,8 +713,14 @@ public class BattleCommand {
         if (!tkVictims.isEmpty()) {
             sender.sendMessage(Messages.raw("<red>Тимкиллы (убил(а) союзников):</red> " + formatOpponents(tkVictims)));
         }
+        if (!killWeapons.isEmpty()) {
+            sender.sendMessage(Messages.raw("<green>Оружие (килы):</green> " + formatOpponents(killWeapons)));
+        }
         if (!killers.isEmpty()) {
             sender.sendMessage(Messages.raw("<red>Убит(а) кем:</red> " + formatOpponents(killers)));
+        }
+        if (!deathWeapons.isEmpty()) {
+            sender.sendMessage(Messages.raw("<red>Смерти от оружия:</red> " + formatOpponents(deathWeapons)));
         }
         if (environmentDeaths > 0) {
             sender.sendMessage(Messages.raw("<gray>Прочих смертей (не от игрока битвы): <white>" + environmentDeaths));
@@ -740,6 +778,23 @@ public class BattleCommand {
         return count;
     }
 
+    /** Оружие, которым игрок убивал (asKiller=true) или от которого умирал (asKiller=false). */
+    private Map<String, Integer> weaponsOf(BattleStats stats, String name, boolean asKiller) {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        for (StatEvent ev : stats.events) {
+            if (ev.type != StatEvent.Type.KILL || ev.weapon == null) {
+                continue;
+            }
+            boolean match = asKiller
+                    ? (ev.killer != null && name.equalsIgnoreCase(ev.killer))
+                    : (ev.victim != null && name.equalsIgnoreCase(ev.victim));
+            if (match) {
+                map.merge(ev.weapon, 1, Integer::sum);
+            }
+        }
+        return map;
+    }
+
     /** Сортирует карту «имя → счёт» по убыванию счёта. */
     private Map<String, Integer> sortedByCount(Map<String, Integer> map) {
         return map.entrySet().stream()
@@ -775,6 +830,79 @@ public class BattleCommand {
         return 1;
     }
 
+    /** Накопитель по игроку для сводной статистики за всё время. */
+    private static class Totals {
+        String name;
+        int battles;
+        int kills;
+        int deaths;
+        int pointsCaptured;
+        int damageDealt;
+    }
+
+    /** Топ игроков за всё время по выбранной метрике. */
+    private int top(CommandContext<CommandSourceStack> ctx, String metric) {
+        CommandSender sender = ctx.getSource().getSender();
+        List<BattleStats> history = statsManager.history();
+        if (history.isEmpty()) {
+            sender.sendMessage(Messages.msg("<gray>История битв пуста."));
+            return 1;
+        }
+
+        Map<String, Totals> totals = new LinkedHashMap<>();
+        for (BattleStats s : history) {
+            for (BattleStats.PlayerSummary ps : s.players) {
+                String key = ps.uuid != null ? ps.uuid.toString() : ps.name;
+                if (key == null) {
+                    continue;
+                }
+                Totals t = totals.computeIfAbsent(key, k -> new Totals());
+                t.name = ps.name != null ? ps.name : t.name;
+                t.battles++;
+                t.kills += ps.kills;
+                t.deaths += ps.deaths;
+                t.pointsCaptured += ps.pointsCaptured;
+                t.damageDealt += ps.damageDealt;
+            }
+        }
+
+        String metricLabel;
+        Comparator<Totals> cmp;
+        switch (metric) {
+            case "kd" -> {
+                metricLabel = "K/D";
+                cmp = Comparator.comparingDouble((Totals t) -> t.deaths == 0 ? t.kills : (double) t.kills / t.deaths).reversed();
+            }
+            case "damage" -> {
+                metricLabel = "урон";
+                cmp = Comparator.comparingInt((Totals t) -> t.damageDealt).reversed();
+            }
+            case "captures" -> {
+                metricLabel = "захваты точек";
+                cmp = Comparator.comparingInt((Totals t) -> t.pointsCaptured).reversed();
+            }
+            default -> {
+                metricLabel = "убийства";
+                cmp = Comparator.comparingInt((Totals t) -> t.kills).reversed();
+            }
+        }
+
+        sender.sendMessage(Messages.raw("<gold>═══ Топ игроков за всё время: " + metricLabel + " ═══"));
+        sender.sendMessage(Messages.raw("<gray>Всего битв в истории: <white>" + history.size()));
+        int place = 1;
+        for (Totals t : totals.values().stream().sorted(cmp).limit(10).toList()) {
+            String value = switch (metric) {
+                case "kd" -> String.format("%.2f", t.deaths == 0 ? t.kills : (double) t.kills / t.deaths);
+                case "damage" -> String.valueOf(t.damageDealt);
+                case "captures" -> String.valueOf(t.pointsCaptured);
+                default -> String.valueOf(t.kills);
+            };
+            sender.sendMessage(Messages.raw("<gold>" + place++ + ".</gold> <white>" + t.name
+                    + "</white> <gray>(" + t.battles + " битв)</gray>: <white>" + value + "</white>"));
+        }
+        return 1;
+    }
+
     private void printStats(CommandSender sender, BattleStats stats) {
         SimpleDateFormat fmt = new SimpleDateFormat("dd.MM.yyyy HH:mm");
         sender.sendMessage(Messages.raw("<gold>═══ Битва #<white>" + stats.id + "</white>: <white>"
@@ -792,14 +920,50 @@ public class BattleCommand {
                     + " <gray>(убийств: " + s.kills + ", смертей: " + s.deaths + ", тимкиллов: " + s.teamkills
                     + ", точек: " + s.pointsCaptured + ", удержаний: " + s.holdAwards + ")</gray>"));
         }
-        if (!stats.players.isEmpty()) {
-            sender.sendMessage(Messages.raw("<gold>Топ игроков по убийствам:"));
-            for (BattleStats.PlayerSummary ps : stats.players) {
-                String colored = ps.team != null ? ps.team.colorize(ps.name) : "<white>" + ps.name + "</white>";
-                sender.sendMessage(Messages.raw("  " + colored + "<gray>: <white>" + ps.kills
-                        + " К / " + ps.deaths + " С</gray> <green>[K/D " + ps.kd() + "]</green>"));
+        String firstBlood = firstBlood(stats);
+        if (firstBlood != null) {
+            sender.sendMessage(Messages.raw("<gold>First blood: </gold>" + firstBlood));
+        }
+        List<String> timeline = scoreTimeline(stats);
+        if (!timeline.isEmpty()) {
+            sender.sendMessage(Messages.raw("<gold>Динамика счёта:"));
+            for (String line : timeline) {
+                sender.sendMessage(Messages.raw("  " + line));
             }
         }
+        String mvp = mvp(stats);
+        if (mvp != null) {
+            sender.sendMessage(Messages.raw("<gold>MVP: </gold>" + mvp));
+        }
+        if (!stats.players.isEmpty()) {
+            sender.sendMessage(Messages.raw("<gold>Топ игроков по убийствам:"));
+            int shown = 0;
+            for (BattleStats.PlayerSummary ps : stats.players) {
+                if (shown >= 10) {
+                    break;
+                }
+                String colored = ps.team != null ? ps.team.colorize(ps.name) : "<white>" + ps.name + "</white>";
+                sender.sendMessage(Messages.raw("  " + colored + "<gray>: <white>" + ps.kills
+                        + " К / " + ps.deaths + " С</gray> <green>[K/D " + ps.kd() + "]</green>"
+                        + " <gray>урон " + ps.damageDealt + "</gray>"));
+                shown++;
+            }
+        }
+        List<String> weapons = topWeapons(stats, 5);
+        if (!weapons.isEmpty()) {
+            sender.sendMessage(Messages.raw("<gold>Топ оружия:"));
+            for (String w : weapons) {
+                sender.sendMessage(Messages.raw("  - " + w));
+            }
+        }
+        List<String> holds = holdTimes(stats);
+        if (!holds.isEmpty()) {
+            sender.sendMessage(Messages.raw("<gold>Владение точками:"));
+            for (String h : holds) {
+                sender.sendMessage(Messages.raw("  - " + h));
+            }
+        }
+        printRoster(sender, stats);
         sender.sendMessage(Messages.raw("<gray>Совет: <white>/battle stats <id> team <команда></white> — команда, "
                 + "<white>/battle stats <id> me</white> — лично, "
                 + "<white>/battle stats <id> player <ник></white> — другой игрок.</gray>"));
@@ -807,6 +971,189 @@ public class BattleCommand {
             sender.sendMessage(Messages.raw("<gold>События:"));
             for (StatEvent ev : stats.events) {
                 sender.sendMessage(Messages.raw("  <gray>[" + formatTime(ev.timeSeconds) + "]</gray> " + describe(stats, ev)));
+            }
+        }
+    }
+
+    /** Первое убийство битвы (First blood). */
+    private String firstBlood(BattleStats stats) {
+        StatEvent first = null;
+        for (StatEvent ev : stats.events) {
+            if (ev.type != StatEvent.Type.KILL && ev.type != StatEvent.Type.TEAMKILL) {
+                continue;
+            }
+            if (first == null || ev.timeSeconds < first.timeSeconds) {
+                first = ev;
+            }
+        }
+        if (first == null) {
+            return null;
+        }
+        String killer = first.killer == null ? "?"
+                : (first.team != null ? first.team.colorize(first.killer) : "<white>" + first.killer + "</white>");
+        String weapon = first.weapon == null ? "" : " <gray>(" + first.weapon + ")</gray>";
+        return killer + " <gray>убил(а)</gray> <white>" + first.victim + "</white>" + weapon;
+    }
+
+    /** Динамика счёта: снимки каждые N секунд + финальный счёт. */
+    private List<String> scoreTimeline(BattleStats stats) {
+        if (stats.teams.isEmpty()) {
+            return List.of();
+        }
+        Map<BattleTeam, Integer> scores = new EnumMap<>(BattleTeam.class);
+        for (BattleTeam t : stats.teams.keySet()) {
+            scores.put(t, 0);
+        }
+        List<StatEvent> sorted = stats.events.stream()
+                .sorted(Comparator.comparingInt(e -> e.timeSeconds))
+                .toList();
+        int interval = Math.max(60, stats.durationSeconds / 10);
+        List<String> lines = new ArrayList<>();
+        int idx = 0;
+        int mark = interval;
+        while (mark <= stats.durationSeconds) {
+            while (idx < sorted.size() && sorted.get(idx).timeSeconds < mark) {
+                applyDelta(scores, sorted.get(idx));
+                idx++;
+            }
+            lines.add("<gray>[" + formatTime(mark) + "]</gray> " + formatScores(stats, scores));
+            mark += interval;
+        }
+        while (idx < sorted.size()) {
+            applyDelta(scores, sorted.get(idx));
+            idx++;
+        }
+        lines.add("<gray>[" + formatTime(stats.durationSeconds) + "]</gray> <white>Финал:</white> "
+                + formatScores(stats, scores));
+        return lines;
+    }
+
+    private void applyDelta(Map<BattleTeam, Integer> scores, StatEvent ev) {
+        if (ev.scoreDelta == 0 || ev.team == null) {
+            return;
+        }
+        scores.merge(ev.team, ev.scoreDelta, Integer::sum);
+    }
+
+    private String formatScores(BattleStats stats, Map<BattleTeam, Integer> scores) {
+        return stats.teams.keySet().stream()
+                .sorted(Comparator.comparingInt((BattleTeam t) -> scores.getOrDefault(t, 0)).reversed())
+                .map(t -> t.colorize(teamDisplay(stats, t)) + ": <white>" + scores.getOrDefault(t, 0))
+                .collect(Collectors.joining("   "));
+    }
+
+    /** Лучший игрок битвы (MVP) по комбинации очков. */
+    private String mvp(BattleStats stats) {
+        if (stats.players.isEmpty()) {
+            return null;
+        }
+        BattleStats.PlayerSummary best = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (BattleStats.PlayerSummary ps : stats.players) {
+            double score = ps.kills * 2.0 + ps.pointsCaptured * 3.0 + ps.damageDealt / 100.0 - ps.teamkills * 2.0;
+            if (score > bestScore) {
+                bestScore = score;
+                best = ps;
+            }
+        }
+        if (best == null) {
+            return null;
+        }
+        String colored = best.team != null ? best.team.colorize(best.name) : "<white>" + best.name + "</white>";
+        return colored + " <gray>[</gray><white>" + best.kills + " К / " + best.deaths + " С</white>"
+                + " <gray>урон " + best.damageDealt + ", точек " + best.pointsCaptured + "</gray><gray>]</gray>";
+    }
+
+    /** Топ оружия по всем убийствам битвы. */
+    private List<String> topWeapons(BattleStats stats, int limit) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (StatEvent ev : stats.events) {
+            if ((ev.type != StatEvent.Type.KILL && ev.type != StatEvent.Type.TEAMKILL) || ev.weapon == null) {
+                continue;
+            }
+            counts.merge(ev.weapon, 1, Integer::sum);
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .limit(limit)
+                .map(e -> "<white>" + e.getKey() + "</white> <gray>— " + e.getValue() + " убийств(а)</gray>")
+                .collect(Collectors.toList());
+    }
+
+    /** Сколько времени каждая команда удерживала каждую точку. */
+    private List<String> holdTimes(BattleStats stats) {
+        Map<String, Map<BattleTeam, Integer>> holds = new LinkedHashMap<>();
+        Map<String, BattleTeam> owner = new LinkedHashMap<>();
+        Map<String, Integer> since = new LinkedHashMap<>();
+
+        for (StatEvent ev : stats.events.stream()
+                .sorted(Comparator.comparingInt(e -> e.timeSeconds))
+                .toList()) {
+            if (ev.type != StatEvent.Type.POINT_CAPTURED || ev.team == null || ev.point == null) {
+                continue;
+            }
+            BattleTeam prev = owner.put(ev.point, ev.team);
+            int prevTime = since.getOrDefault(ev.point, 0);
+            if (prev != null) {
+                holds.computeIfAbsent(ev.point, k -> new EnumMap<>(BattleTeam.class))
+                        .merge(prev, Math.max(0, ev.timeSeconds - prevTime), Integer::sum);
+            }
+            since.put(ev.point, ev.timeSeconds);
+        }
+        for (Map.Entry<String, BattleTeam> e : owner.entrySet()) {
+            int held = Math.max(0, stats.durationSeconds - since.getOrDefault(e.getKey(), 0));
+            if (held > 0) {
+                holds.computeIfAbsent(e.getKey(), k -> new EnumMap<>(BattleTeam.class))
+                        .merge(e.getValue(), held, Integer::sum);
+            }
+        }
+
+        List<String> lines = new ArrayList<>();
+        for (Map.Entry<String, Map<BattleTeam, Integer>> e : holds.entrySet()) {
+            String details = e.getValue().entrySet().stream()
+                    .sorted(Map.Entry.<BattleTeam, Integer>comparingByValue().reversed())
+                    .map(en -> en.getKey().colorize(teamDisplay(stats, en.getKey()))
+                            + " <white>" + formatTime(en.getValue()) + "</white>")
+                    .collect(Collectors.joining("   "));
+            if (!details.isBlank()) {
+                lines.add("<yellow>" + e.getKey() + "</yellow>: " + details);
+            }
+        }
+        return lines;
+    }
+
+    /** Полный состав участников битвы по командам с личной статистикой. */
+    private void printRoster(CommandSender sender, BattleStats stats) {
+        if (stats.players.isEmpty()) {
+            return;
+        }
+        sender.sendMessage(Messages.raw("<gold>Состав участников: <gray>(" + stats.players.size() + ")</gray>"));
+        Map<BattleTeam, List<BattleStats.PlayerSummary>> byTeam = new EnumMap<>(BattleTeam.class);
+        List<BattleStats.PlayerSummary> noTeam = new ArrayList<>();
+        for (BattleStats.PlayerSummary ps : stats.players) {
+            if (ps.team != null) {
+                byTeam.computeIfAbsent(ps.team, k -> new ArrayList<>()).add(ps);
+            } else {
+                noTeam.add(ps);
+            }
+        }
+        for (BattleTeam team : stats.teams.keySet()) {
+            List<BattleStats.PlayerSummary> members = new ArrayList<>(byTeam.getOrDefault(team, List.of()));
+            members.sort(Comparator.comparingInt((BattleStats.PlayerSummary s) -> s.kills).reversed());
+            sender.sendMessage(Messages.raw("  " + team.colorize(teamDisplay(stats, team))
+                    + " <gray>(" + members.size() + "):</gray>"));
+            for (BattleStats.PlayerSummary ps : members) {
+                sender.sendMessage(Messages.raw("    " + team.colorize(ps.name) + "<gray>: <white>" + ps.kills
+                        + " К / " + ps.deaths + " С</white> <green>[K/D " + ps.kd() + "]</green>"
+                        + " <gray>урон " + ps.damageDealt + " / получен " + ps.damageTaken
+                        + " / серия " + ps.bestStreak + "</gray>"));
+            }
+        }
+        if (!noTeam.isEmpty()) {
+            sender.sendMessage(Messages.raw("  <gray>Без команды:</gray>"));
+            for (BattleStats.PlayerSummary ps : noTeam) {
+                sender.sendMessage(Messages.raw("    <white>" + ps.name + "</white><gray>: <white>"
+                        + ps.kills + " К / " + ps.deaths + " С</gray>"));
             }
         }
     }

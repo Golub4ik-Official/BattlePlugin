@@ -35,7 +35,10 @@ public class BattleStats {
         public int deaths;
         public int teamkills;
         public int bestStreak;
+        public int worstDeathStreak;
         public int pointsCaptured;
+        public int damageDealt;
+        public int damageTaken;
 
         public String kd() {
             double kd = deaths == 0 ? kills : (double) kills / deaths;
@@ -96,7 +99,10 @@ public class BattleStats {
             psSection.set("deaths", ps.deaths);
             psSection.set("teamkills", ps.teamkills);
             psSection.set("bestStreak", ps.bestStreak);
+            psSection.set("worstDeathStreak", ps.worstDeathStreak);
             psSection.set("pointsCaptured", ps.pointsCaptured);
+            psSection.set("damageDealt", ps.damageDealt);
+            psSection.set("damageTaken", ps.damageTaken);
         }
 
         ConfigurationSection eventsSection = section.createSection("events");
@@ -156,7 +162,10 @@ public class BattleStats {
                 pl.deaths = ps.getInt("deaths");
                 pl.teamkills = ps.getInt("teamkills");
                 pl.bestStreak = ps.getInt("bestStreak");
+                pl.worstDeathStreak = ps.getInt("worstDeathStreak");
                 pl.pointsCaptured = ps.getInt("pointsCaptured");
+                pl.damageDealt = ps.getInt("damageDealt");
+                pl.damageTaken = ps.getInt("damageTaken");
                 players.add(pl);
             }
         }

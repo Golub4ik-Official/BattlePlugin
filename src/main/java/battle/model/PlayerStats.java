@@ -14,8 +14,12 @@ public class PlayerStats {
     private int teamkills;
     private int currentStreak;
     private int bestStreak;
+    private int currentDeathStreak;
+    private int worstDeathStreak;
     private int pointsCaptured;
     private int pointsContested;
+    private int damageDealt;
+    private int damageTaken;
 
     public PlayerStats(UUID uuid, String name) {
         this.uuid = uuid;
@@ -28,11 +32,16 @@ public class PlayerStats {
         if (currentStreak > bestStreak) {
             bestStreak = currentStreak;
         }
+        currentDeathStreak = 0;
     }
 
     public void addDeath() {
         deaths++;
         currentStreak = 0;
+        currentDeathStreak++;
+        if (currentDeathStreak > worstDeathStreak) {
+            worstDeathStreak = currentDeathStreak;
+        }
     }
 
     public void addTeamkill() {
@@ -45,6 +54,14 @@ public class PlayerStats {
 
     public void addContest() {
         pointsContested++;
+    }
+
+    public void addDamageDealt(double amount) {
+        damageDealt += (int) Math.round(amount);
+    }
+
+    public void addDamageTaken(double amount) {
+        damageTaken += (int) Math.round(amount);
     }
 
     public UUID uuid() {
@@ -77,6 +94,18 @@ public class PlayerStats {
 
     public int pointsContested() {
         return pointsContested;
+    }
+
+    public int damageDealt() {
+        return damageDealt;
+    }
+
+    public int damageTaken() {
+        return damageTaken;
+    }
+
+    public int worstDeathStreak() {
+        return worstDeathStreak;
     }
 
     /** Отношение убийств к смертям (0 смертей = полный K/D = kills). */

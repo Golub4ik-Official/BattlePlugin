@@ -84,7 +84,10 @@ public class StatsManager {
                     + "deaths INTEGER NOT NULL DEFAULT 0,"
                     + "teamkills INTEGER NOT NULL DEFAULT 0,"
                     + "best_streak INTEGER NOT NULL DEFAULT 0,"
+                    + "worst_death_streak INTEGER NOT NULL DEFAULT 0,"
                     + "points_captured INTEGER NOT NULL DEFAULT 0,"
+                    + "damage_dealt INTEGER NOT NULL DEFAULT 0,"
+                    + "damage_taken INTEGER NOT NULL DEFAULT 0,"
                     + "PRIMARY KEY (battle_id, uuid),"
                     + "FOREIGN KEY (battle_id) REFERENCES battles(id) ON DELETE CASCADE)");
             st.execute("CREATE TABLE IF NOT EXISTS battle_events ("
@@ -100,6 +103,29 @@ public class StatsManager {
                     + "delta INTEGER NOT NULL DEFAULT 0,"
                     + "PRIMARY KEY (battle_id, seq),"
                     + "FOREIGN KEY (battle_id) REFERENCES battles(id) ON DELETE CASCADE)");
+        }
+        // Миграция существующей БД: добавляем новые колонки, если их ещё нет.
+        ensureColumn("battle_players", "worst_death_streak", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("battle_players", "damage_dealt", "INTEGER NOT NULL DEFAULT 0");
+        ensureColumn("battle_players", "damage_taken", "INTEGER NOT NULL DEFAULT 0");
+    }
+
+    private void ensureColumn(String table, String column, String type) throws SQLException {
+        boolean found = false;
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equals(rs.getString("name"))) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            try (Statement st = connection.createStatement()) {
+                st.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+            }
+            plugin.getLogger().info("БД: добавлена колонка " + table + "." + column);
         }
     }
 
@@ -244,7 +270,10 @@ public class StatsManager {
                     pl.deaths = rs.getInt("deaths");
                     pl.teamkills = rs.getInt("teamkills");
                     pl.bestStreak = rs.getInt("best_streak");
+                    pl.worstDeathStreak = rs.getInt("worst_death_streak");
                     pl.pointsCaptured = rs.getInt("points_captured");
+                    pl.damageDealt = rs.getInt("damage_dealt");
+                    pl.damageTaken = rs.getInt("damage_taken");
                     players.add(pl);
                 }
             }
@@ -328,7 +357,8 @@ public class StatsManager {
     private void insertPlayers(int battleId, List<BattleStats.PlayerSummary> players) throws SQLException {
         try (PreparedStatement ps = connection.prepareStatement(
                 "INSERT INTO battle_players (battle_id, uuid, name, team, kills, deaths, teamkills,"
-                        + " best_streak, points_captured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                        + " best_streak, worst_death_streak, points_captured, damage_dealt, damage_taken)"
+                        + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             for (BattleStats.PlayerSummary pl : players) {
                 ps.setInt(1, battleId);
                 ps.setString(2, pl.uuid == null ? null : pl.uuid.toString());
@@ -338,7 +368,10 @@ public class StatsManager {
                 ps.setInt(6, pl.deaths);
                 ps.setInt(7, pl.teamkills);
                 ps.setInt(8, pl.bestStreak);
-                ps.setInt(9, pl.pointsCaptured);
+                ps.setInt(9, pl.worstDeathStreak);
+                ps.setInt(10, pl.pointsCaptured);
+                ps.setInt(11, pl.damageDealt);
+                ps.setInt(12, pl.damageTaken);
                 ps.addBatch();
             }
             ps.executeBatch();
