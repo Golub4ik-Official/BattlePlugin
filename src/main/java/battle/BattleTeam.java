@@ -1,9 +1,8 @@
 package battle;
 
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.ChatColor;
 import org.bukkit.Color;
-import org.bukkit.boss.BarColor;
+import net.kyori.adventure.bossbar.BossBar;
 
 import java.util.Locale;
 
@@ -11,30 +10,22 @@ import java.util.Locale;
  * Команды противодействия битвы.
  */
 public enum BattleTeam {
-    RED("Красные", NamedTextColor.RED, BarColor.RED, Color.fromRGB(0xFF5555)),
-    BLUE("Синие", NamedTextColor.BLUE, BarColor.BLUE, Color.fromRGB(0x5555FF)),
-    GREEN("Зелёные", NamedTextColor.GREEN, BarColor.GREEN, Color.fromRGB(0x55FF55)),
-    YELLOW("Жёлтые", NamedTextColor.YELLOW, BarColor.YELLOW, Color.fromRGB(0xFFFF55));
+    RED("Красные", NamedTextColor.RED, BossBar.Color.RED, Color.fromRGB(0xFF5555)),
+    BLUE("Синие", NamedTextColor.BLUE, BossBar.Color.BLUE, Color.fromRGB(0x5555FF)),
+    GREEN("Зелёные", NamedTextColor.GREEN, BossBar.Color.GREEN, Color.fromRGB(0x55FF55)),
+    YELLOW("Жёлтые", NamedTextColor.YELLOW, BossBar.Color.YELLOW, Color.fromRGB(0xFFFF55));
 
     private final String displayName;
     private final NamedTextColor textColor;
-    private final BarColor barColor;
+    private final BossBar.Color barColor;
     private final Color particleColor;
-    private final ChatColor chatColor;
     private String label;
 
-    BattleTeam(String displayName, NamedTextColor textColor, BarColor barColor, Color particleColor) {
+    BattleTeam(String displayName, NamedTextColor textColor, BossBar.Color barColor, Color particleColor) {
         this.displayName = displayName;
         this.textColor = textColor;
         this.barColor = barColor;
         this.particleColor = particleColor;
-        this.chatColor = switch (name()) {
-            case "RED" -> ChatColor.RED;
-            case "BLUE" -> ChatColor.BLUE;
-            case "GREEN" -> ChatColor.GREEN;
-            case "YELLOW" -> ChatColor.YELLOW;
-            default -> ChatColor.WHITE;
-        };
     }
 
     public String displayName() {
@@ -65,16 +56,12 @@ public enum BattleTeam {
         return textColor;
     }
 
-    public BarColor barColor() {
+    public BossBar.Color barColor() {
         return barColor;
     }
 
     public Color particleColor() {
         return particleColor;
-    }
-
-    public ChatColor colorName() {
-        return chatColor;
     }
 
     /** MiniMessage-тег цвета команды, например {@code <#ff5555>}. */

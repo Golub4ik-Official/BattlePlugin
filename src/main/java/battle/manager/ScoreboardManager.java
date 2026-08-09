@@ -1,14 +1,13 @@
 package battle.manager;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.Criteria;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
-import org.bukkit.scoreboard.Score;
 import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.Team;
 
 import java.util.HashMap;
 import java.util.List;
@@ -20,11 +19,9 @@ import java.util.UUID;
  */
 public class ScoreboardManager {
 
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
     private static final String OBJECTIVE = "battle";
 
     private final Map<UUID, Scoreboard> boards = new HashMap<>();
-    private final Map<UUID, Map<String, Integer>> entries = new HashMap<>();
 
     /** Создаёт дашборд игроку. */
     public void create(Player player, Component title) {
@@ -34,7 +31,14 @@ public class ScoreboardManager {
         obj.numberFormat(io.papermc.paper.scoreboard.numbers.NumberFormat.blank());
         player.setScoreboard(board);
         boards.put(player.getUniqueId(), board);
-        entries.put(player.getUniqueId(), new HashMap<>());
+        
+        // Регистрируем 15 команд для строк
+        for (int i = 0; i < 15; i++) {
+            Team team = board.registerNewTeam("line_" + i);
+            String entry = "§" + Integer.toHexString(i) + "§r";
+            team.addEntry(entry);
+            obj.getScore(entry).setScore(15 - i);
+        }
     }
 
     /** Обновляет строки дашборда. Первая строка — сверху. */
@@ -49,35 +53,18 @@ public class ScoreboardManager {
         }
         obj.displayName(title);
 
-        Map<String, Integer> current = entries.get(player.getUniqueId());
-        Map<String, Integer> next = new HashMap<>();
-
-        int i = lines.size();
-        int blankCounter = 0;
-        for (Component line : lines) {
-            String entry = LEGACY.serialize(line);
-            if (entry.isEmpty()) {
-                // Пустые строки должны быть уникальными, иначе схлопываются в одну запись.
-                // §0..§9 — невидимые цветовые коды, делают строки различимыми.
-                entry = "§" + Integer.toHexString(blankCounter++ & 0xF) + "§r";
-            }
-            next.put(entry, i--);
-        }
-
-        for (Map.Entry<String, Integer> e : current.entrySet()) {
-            if (!next.containsKey(e.getKey())) {
-                board.resetScores(e.getKey());
+        for (int i = 0; i < 15; i++) {
+            Team team = board.getTeam("line_" + i);
+            if (team == null) continue;
+            
+            String entry = "§" + Integer.toHexString(i) + "§r";
+            if (i < lines.size()) {
+                team.prefix(lines.get(i));
+                obj.getScore(entry).setScore(15 - i);
+            } else {
+                board.resetScores(entry);
             }
         }
-        for (Map.Entry<String, Integer> e : next.entrySet()) {
-            Integer previous = current.get(e.getKey());
-            if (previous == null || !previous.equals(e.getValue())) {
-                Score score = obj.getScore(e.getKey());
-                score.setScore(e.getValue());
-            }
-        }
-
-        entries.put(player.getUniqueId(), next);
     }
 
     /** Есть ли дашборд у игрока. */
@@ -88,13 +75,11 @@ public class ScoreboardManager {
     /** Убирает дашборд у игрока. */
     public void remove(Player player) {
         boards.remove(player.getUniqueId());
-        entries.remove(player.getUniqueId());
         player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
     }
 
     /** Убирает дашборды у всех игроков (при завершении битвы). */
     public void removeAll() {
-        // Сначала сбрасываем scoreboard у всех игроков, у которых стоит наш дашборд.
         for (Player player : Bukkit.getOnlinePlayers()) {
             Scoreboard board = player.getScoreboard();
             if (board != null && board != Bukkit.getScoreboardManager().getMainScoreboard()
@@ -102,8 +87,6 @@ public class ScoreboardManager {
                 player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
             }
         }
-        // Затем очищаем внутренние карты, чтобы hasBoard() вернул false.
         boards.clear();
-        entries.clear();
     }
 }

@@ -167,7 +167,7 @@ public class StatsManager {
         if (stats.id >= nextId) {
             nextId = stats.id + 1;
         }
-        insert(stats);
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> insert(stats));
     }
 
     public int allocateId() {

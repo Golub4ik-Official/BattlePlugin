@@ -4,15 +4,11 @@ import battle.BattleTeam;
 import battle.BattlePlugin;
 import battle.Messages;
 import battle.model.CapturePoint;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.bossbar.BossBar;
 import org.bukkit.Location;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
-import org.bukkit.boss.BossBar;
 import org.bukkit.entity.Player;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -20,8 +16,6 @@ import java.util.UUID;
  * BossBar-полоса возле точек захвата: показывается ближайшая точка в радиусе.
  */
 public class BossBarManager {
-
-    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
 
     private final BattlePlugin plugin;
     private final PointManager pointManager;
@@ -56,56 +50,59 @@ public class BossBarManager {
         if (nearest == null) {
             BossBar bar = bars.remove(player.getUniqueId());
             if (bar != null) {
-                bar.removePlayer(player);
+                player.hideBossBar(bar);
             }
             return;
         }
 
         BossBar bar = bars.get(player.getUniqueId());
         if (bar == null) {
-            bar = org.bukkit.Bukkit.createBossBar(nearest.name(), BarColor.WHITE, BarStyle.SOLID);
-            bar.addPlayer(player);
+            bar = BossBar.bossBar(Messages.raw("<white>" + nearest.name()), 0f, BossBar.Color.WHITE, BossBar.Overlay.PROGRESS);
+            player.showBossBar(bar);
             bars.put(player.getUniqueId(), bar);
         }
 
-        bar.setTitle(LEGACY.serialize(Messages.raw("<white>" + nearest.name())));
+        bar.name(Messages.raw("<white>" + nearest.name()));
 
         CapturePoint.State state = nearest.state(captureTime);
-        BarColor color;
+        BossBar.Color color;
         double progress;
         switch (state) {
             case CAPTURED -> {
                 BattleTeam owner = nearest.owner();
-                color = owner != null ? owner.barColor() : BarColor.WHITE;
+                color = owner != null ? owner.barColor() : BossBar.Color.WHITE;
                 progress = 1.0;
             }
             case CAPTURING -> {
                 BattleTeam capturing = nearest.capturingTeam();
-                color = capturing != null ? capturing.barColor() : BarColor.WHITE;
+                color = capturing != null ? capturing.barColor() : BossBar.Color.WHITE;
                 progress = (double) nearest.progress() / captureTime;
                 progress = Math.max(0.0, Math.min(1.0, progress));
             }
             default -> {
-                color = BarColor.WHITE;
+                color = BossBar.Color.WHITE;
                 progress = 0.0;
             }
         }
-        bar.setColor(color);
-        bar.setProgress(progress);
+        bar.color(color);
+        bar.progress((float) progress);
     }
 
     /** Убирает полосу у игрока. */
     public void remove(Player player) {
         BossBar bar = bars.remove(player.getUniqueId());
         if (bar != null) {
-            bar.removePlayer(player);
+            player.hideBossBar(bar);
         }
     }
 
     /** Убирает все полосы (при завершении битвы). */
     public void clearAll() {
-        for (BossBar bar : bars.values()) {
-            bar.removeAll();
+        for (Map.Entry<UUID, BossBar> entry : bars.entrySet()) {
+            Player player = org.bukkit.Bukkit.getPlayer(entry.getKey());
+            if (player != null) {
+                player.hideBossBar(entry.getValue());
+            }
         }
         bars.clear();
     }

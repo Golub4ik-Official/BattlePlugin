@@ -38,6 +38,7 @@ public class TeamManager {
     }
 
     /** Время игрока на сервере в часах (по статистике PLAY_ONE_MINUTE, значение в тиках). */
+    @SuppressWarnings("deprecation")
     public double playtimeHours(Player player) {
         return player.getStatistic(Statistic.PLAY_ONE_MINUTE) / 72000.0;
     }
@@ -178,8 +179,8 @@ public class TeamManager {
                 if (t == null) {
                     t = sb.registerNewTeam(teamKey(team));
                 }
-                if (t.getColor() != team.colorName()) {
-                    t.setColor(team.colorName());
+                if (t.color() != team.textColor()) {
+                    t.color(team.textColor());
                 }
                 boolean changed = false;
                 for (String entry : t.getEntries()) {

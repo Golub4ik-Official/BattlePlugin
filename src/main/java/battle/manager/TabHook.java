@@ -87,7 +87,7 @@ public final class TabHook {
             if (tabPlayer == null) {
                 return;
             }
-            String color = team.colorName().toString();
+            String color = team.miniTag();
             api.getTabListFormatManager().setPrefix(tabPlayer, color);
             api.getNameTagManager().setPrefix(tabPlayer, color);
         } catch (Throwable ignored) {
