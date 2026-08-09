@@ -114,7 +114,7 @@ public class BattleManager {
         killstreakWindowSeconds = c.getInt("battle.announcements.killstreak-window-seconds", 8);
         announcementSounds = c.getBoolean("battle.announcements.sounds", true);
         teamManager.setMinPlaytimeHours(c.getInt("team.min-playtime-hours", 0));
-        webhook = new DiscordWebhook(c.getString("discord.webhook-url", ""));
+        webhook = new DiscordWebhook(c.getString("discord.webhook-url", ""), plugin.getLogger());
     }
 
     public void reload() {
@@ -522,7 +522,7 @@ public class BattleManager {
             if (team == null || !battle.teams().contains(team)) {
                 continue;
             }
-            if (!p.getLocation().getWorld().equals(loc.getWorld())) {
+            if (p.getLocation().getWorld() == null || !p.getLocation().getWorld().equals(loc.getWorld())) {
                 continue;
             }
             if (p.getLocation().distanceSquared(loc) <= radiusSq) {
@@ -550,7 +550,8 @@ public class BattleManager {
         Player best = null;
         double bestDist = Double.MAX_VALUE;
         for (Player p : onlineInTeam(team)) {
-            if (!p.getLocation().getWorld().equals(point.location().getWorld())) {
+            if (p.getLocation().getWorld() == null
+                    || !p.getLocation().getWorld().equals(point.location().getWorld())) {
                 continue;
             }
             double d = p.getLocation().distanceSquared(point.location());
@@ -735,9 +736,13 @@ public class BattleManager {
                     + " <gray>(убийств: " + ts.kills + ", смертей: " + ts.deaths + ")</gray>"));
         }
 
-        scoreboardManager.removeAll(Set.of());
+        scoreboardManager.removeAll();
         bossBarManager.clearAll();
         removePointDisplays();
+        // Сбрасываем ярлыки команд — иначе следующая битва унаследует их.
+        for (BattleTeam t : ended.teams()) {
+            t.resetLabel();
+        }
         voiceGroupsHook.endBattle();
         battle = null;
     }
@@ -820,7 +825,11 @@ public class BattleManager {
         return String.format("%d:%02d", seconds / 60, seconds % 60);
     }
 
+    /** Рассылает сообщение только участникам текущей битвы (+ консоль). */
     private void broadcast(Component component) {
-        plugin.getServer().broadcast(component);
+        plugin.getServer().getConsoleSender().sendMessage(component);
+        for (Player p : participants()) {
+            p.sendMessage(component);
+        }
     }
 }

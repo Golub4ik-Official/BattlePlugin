@@ -117,7 +117,8 @@ public class CapturePoint {
                 owner = dominant;
                 res.lostBy = previousOwner;
                 res.capturedBy = dominant;
-                res.startedBy = dominant;
+                // startedBy уже установлен выше (при progress >= captureTime),
+                // не перезаписываем, чтобы не было двойного анонса в чат.
             }
         }
         return res;

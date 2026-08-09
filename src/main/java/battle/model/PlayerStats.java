@@ -108,10 +108,9 @@ public class PlayerStats {
         return worstDeathStreak;
     }
 
-    /** Отношение убийств к смертям (0 смертей = полный K/D = kills). */
-    public String kd(boolean prefix) {
+    /** Отношение убийств к смертям (0 смертей = K/D = kills). */
+    public String kd() {
         double kd = deaths == 0 ? kills : (double) kills / deaths;
-        String s = String.format("%.2f", kd);
-        return prefix ? "K/D: " + s : s;
+        return String.format("%.2f", kd);
     }
 }

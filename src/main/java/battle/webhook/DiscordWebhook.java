@@ -9,6 +9,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Отправка итогов завершённой битвы в Discord-канал через вебхук.
@@ -21,9 +22,15 @@ public class DiscordWebhook {
 
     private final String url;
     private final HttpClient client;
+    private final Logger logger;
 
     public DiscordWebhook(String url) {
+        this(url, Logger.getLogger("BattlePlugin.DiscordWebhook"));
+    }
+
+    public DiscordWebhook(String url, Logger logger) {
         this.url = url == null ? "" : url.trim();
+        this.logger = logger;
         this.client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
@@ -45,9 +52,15 @@ public class DiscordWebhook {
                 .POST(HttpRequest.BodyPublishers.ofString(buildPayload(stats)))
                 .build();
         client.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+                .thenAccept(response -> {
+                    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                        logger.warning("Discord webhook вернул HTTP " + response.statusCode()
+                                + " для битвы #" + stats.id);
+                    }
+                })
                 .exceptionally(ex -> {
-                    // Ошибка отправки не должна падать в консоль с трейсом каждый раз громко;
-                    // логируется на уровне конфига ниже только при включённом debug-выводе.
+                    logger.warning("Discord webhook: ошибка отправки (битва #"
+                            + stats.id + "): " + ex.getMessage());
                     return null;
                 });
     }

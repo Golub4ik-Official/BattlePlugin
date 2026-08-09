@@ -13,7 +13,6 @@ import org.bukkit.scoreboard.Scoreboard;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -54,10 +53,13 @@ public class ScoreboardManager {
         Map<String, Integer> next = new HashMap<>();
 
         int i = lines.size();
+        int blankCounter = 0;
         for (Component line : lines) {
             String entry = LEGACY.serialize(line);
             if (entry.isEmpty()) {
-                entry = "§r";
+                // Пустые строки должны быть уникальными, иначе схлопываются в одну запись.
+                // §0..§9 — невидимые цветовые коды, делают строки различимыми.
+                entry = "§" + Integer.toHexString(blankCounter++ & 0xF) + "§r";
             }
             next.put(entry, i--);
         }
@@ -91,11 +93,8 @@ public class ScoreboardManager {
     }
 
     /** Убирает дашборды у всех игроков (при завершении битвы). */
-    public void removeAll(Set<UUID> participants) {
-        for (UUID uuid : participants) {
-            boards.remove(uuid);
-            entries.remove(uuid);
-        }
+    public void removeAll() {
+        // Сначала сбрасываем scoreboard у всех игроков, у которых стоит наш дашборд.
         for (Player player : Bukkit.getOnlinePlayers()) {
             Scoreboard board = player.getScoreboard();
             if (board != null && board != Bukkit.getScoreboardManager().getMainScoreboard()
@@ -103,5 +102,8 @@ public class ScoreboardManager {
                 player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
             }
         }
+        // Затем очищаем внутренние карты, чтобы hasBoard() вернул false.
+        boards.clear();
+        entries.clear();
     }
 }
